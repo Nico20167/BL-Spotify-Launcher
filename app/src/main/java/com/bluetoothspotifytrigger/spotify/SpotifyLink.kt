@@ -21,7 +21,8 @@ object SpotifyLink {
     private const val ID = "[0-9A-Za-z]{22}"
     private val TYPES = PLAYABLE_TYPES.joinToString("|")
 
-    private val uriRegex = Regex("^spotify:($TYPES):($ID)$")
+    // Tolère des paramètres de partage collés derrière (?si=…&pi=…) : on les retire.
+    private val uriRegex = Regex("^spotify:($TYPES):($ID)(?:\\?.*)?$")
     private val legacyUserPlaylistRegex = Regex("^spotify:user:[^:]+:playlist:($ID)$")
     private val webRegex = Regex(
         "^https?://open\\.spotify\\.com/(?:intl-[a-zA-Z-]+/)?($TYPES)/($ID)(?:[/?#].*)?$",
@@ -36,7 +37,9 @@ object SpotifyLink {
         val s = input.trim()
         if (s.isEmpty()) return Result.Invalid("Vide")
 
-        uriRegex.matchEntire(s)?.let { return Result.Valid(s) }
+        uriRegex.matchEntire(s)?.let {
+            return Result.Valid("spotify:${it.groupValues[1]}:${it.groupValues[2]}")
+        }
         legacyUserPlaylistRegex.matchEntire(s)?.let {
             return Result.Valid("spotify:playlist:${it.groupValues[1]}")
         }

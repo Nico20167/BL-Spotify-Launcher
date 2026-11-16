@@ -3,6 +3,7 @@ package com.bluetoothspotifytrigger.trigger
 import android.util.Log
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.spotify.SpotifyController.PlayResult
+import com.bluetoothspotifytrigger.spotify.SpotifyLink
 import kotlinx.coroutines.flow.first
 
 /**
@@ -24,10 +25,16 @@ class TriggerHandler(
     }
 
     suspend fun onDeviceConnected(address: String, name: String): Outcome {
-        val uri = repository.associations.first()[address]
-        if (uri == null) {
+        val stored = repository.associations.first()[address]
+        if (stored == null) {
             Log.i(TAG, "Aucune association pour $name [$address] : rien à faire")
             return Outcome.NoAssociation
+        }
+        // Re-normalise : des données enregistrées par une ancienne version (validation
+        // plus laxiste) peuvent contenir des paramètres de partage (?si=…).
+        val uri = (SpotifyLink.parse(stored) as? SpotifyLink.Result.Valid)?.uri ?: run {
+            Log.w(TAG, "URI enregistré invalide pour $name : $stored")
+            return Outcome.Played(stored, PlayResult.Error("URI invalide : $stored (à corriger dans l'app)"))
         }
         Log.i(TAG, "Association trouvée pour $name [$address] -> $uri")
         val result = play(uri)

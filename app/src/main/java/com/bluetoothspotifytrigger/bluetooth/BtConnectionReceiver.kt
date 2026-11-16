@@ -64,9 +64,10 @@ class BtConnectionReceiver(
 
     // BLUETOOTH_CONNECT est garantie par le service ; lecture du nom protégée quand même.
     @SuppressLint("MissingPermission")
+    // Alias (nom donné par l'utilisateur, Android 11+) sinon nom de l'appareil.
     private fun BluetoothDevice.safeName(): String =
         try {
-            name
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) alias else null) ?: name
         } catch (e: SecurityException) {
             null
         } ?: "(sans nom)"

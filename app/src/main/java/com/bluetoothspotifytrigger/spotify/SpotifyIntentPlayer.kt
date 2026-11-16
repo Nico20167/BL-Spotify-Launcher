@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import android.view.KeyEvent
 import com.bluetoothspotifytrigger.spotify.SpotifyController.PlayResult
 import kotlinx.coroutines.delay
 
@@ -56,22 +57,56 @@ class SpotifyIntentPlayer(context: Context) {
         // Pas d'exception si Android bloque le lancement en arrière-plan : il est
         // ignoré silencieusement. On attend donc qu'un son démarre.
         val audio = appContext.getSystemService(AudioManager::class.java)
-        repeat(CONFIRM_POLLS) {
-            delay(CONFIRM_STEP_MS)
-            if (audio.isMusicActive) {
-                Log.i(TAG, "Lecture confirmée (audio actif)")
+        if (waitForMusic(audio, FIRST_WAIT_MS)) {
+            Log.i(TAG, "Lecture confirmée (audio actif)")
+            return PlayResult.Success
+        }
+
+        // Observé sur Pixel / Spotify 9.2 : si Spotify avait déjà ce contenu en
+        // mémoire (dernier écouté), il l'ouvre mais ignore « :play » et reste en
+        // pause. Le contenu est pourtant chargé : la touche média « Lecture »
+        // (envoyée à la session média active, donc Spotify) le démarre.
+        //
+        // Écran éteint, Spotify démarre plus lentement : une touche envoyée trop
+        // tôt arrive avant que sa session soit prête et est perdue. On la renvoie
+        // donc périodiquement. Sans risque : MEDIA_PLAY n'est pas une bascule
+        // (contrairement à PLAY_PAUSE), la renvoyer pendant la lecture ne fait rien.
+        // Chaque touche donne aussi à Spotify une autorisation temporaire de
+        // démarrer son service de lecture depuis l'arrière-plan (Android 12+).
+        repeat(MEDIA_KEY_ATTEMPTS) { attempt ->
+            Log.i(TAG, "Pas de son : touche média Lecture (essai ${attempt + 1}/$MEDIA_KEY_ATTEMPTS)")
+            sendMediaPlay(audio)
+            if (waitForMusic(audio, MEDIA_KEY_INTERVAL_MS)) {
+                Log.i(TAG, "Lecture confirmée après touche média")
                 return PlayResult.Success
             }
         }
-        Log.w(TAG, "Lecture non confirmée après ${CONFIRM_POLLS * CONFIRM_STEP_MS} ms")
+        Log.w(TAG, "Lecture non confirmée")
         return PlayResult.NotConfirmed
+    }
+
+    private suspend fun waitForMusic(audio: AudioManager, timeoutMs: Long): Boolean {
+        var waited = 0L
+        while (waited < timeoutMs) {
+            delay(POLL_MS)
+            waited += POLL_MS
+            if (audio.isMusicActive) return true
+        }
+        return false
+    }
+
+    private fun sendMediaPlay(audio: AudioManager) {
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
     }
 
     companion object {
         const val TAG = "SpotifyIntentPlayer"
         const val SPOTIFY_PACKAGE = "com.spotify.music"
-        private const val CONFIRM_POLLS = 20
-        private const val CONFIRM_STEP_MS = 500L
+        private const val POLL_MS = 250L
+        private const val FIRST_WAIT_MS = 4_000L
+        private const val MEDIA_KEY_ATTEMPTS = 6
+        private const val MEDIA_KEY_INTERVAL_MS = 3_000L
 
         /**
          * L'app peut-elle ouvrir Spotify depuis l'arrière-plan ? Oui si

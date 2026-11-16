@@ -52,29 +52,29 @@ class TriggerHandlerTest {
     }
 
     @Test fun `appareil associe - lit le bon URI`() = runBlocking {
-        repository.setUri("02:00:00:00:00:01", "spotify:playlist:AAA")
-        repository.setUri("02:00:00:00:00:02", "spotify:album:BBB")
+        repository.setUri("02:00:00:00:00:01", "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M")
+        repository.setUri("02:00:00:00:00:02", "spotify:album:1a2B3c4D5e6F7g8H9i0J1k")
 
         val outcome = handler.onDeviceConnected("02:00:00:00:00:02", "Casque")
 
-        assertEquals(listOf("spotify:album:BBB"), played)
-        assertEquals(TriggerHandler.Outcome.Played("spotify:album:BBB", PlayResult.Success), outcome)
+        assertEquals(listOf("spotify:album:1a2B3c4D5e6F7g8H9i0J1k"), played)
+        assertEquals(TriggerHandler.Outcome.Played("spotify:album:1a2B3c4D5e6F7g8H9i0J1k", PlayResult.Success), outcome)
     }
 
     @Test fun `echec Spotify remonte tel quel`() = runBlocking {
-        repository.setUri("02:00:00:00:00:01", "spotify:playlist:AAA")
+        repository.setUri("02:00:00:00:00:01", "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M")
         nextResult = PlayResult.NotAuthorized
 
         val outcome = handler.onDeviceConnected("02:00:00:00:00:01", "Autoradio")
 
         assertEquals(
-            TriggerHandler.Outcome.Played("spotify:playlist:AAA", PlayResult.NotAuthorized),
+            TriggerHandler.Outcome.Played("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", PlayResult.NotAuthorized),
             outcome,
         )
     }
 
     @Test fun `association effacee - plus de lecture`() = runBlocking {
-        repository.setUri("02:00:00:00:00:01", "spotify:playlist:AAA")
+        repository.setUri("02:00:00:00:00:01", "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M")
         repository.clearUri("02:00:00:00:00:01")
 
         assertEquals(

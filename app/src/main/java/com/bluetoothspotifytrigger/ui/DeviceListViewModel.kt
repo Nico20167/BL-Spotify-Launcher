@@ -2,7 +2,9 @@ package com.bluetoothspotifytrigger.ui
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.os.Build
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -86,7 +88,7 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
             else -> try {
                 BluetoothRead.Devices(
                     adapter.bondedDevices.orEmpty()
-                        .map { PairedDevice(name = it.name ?: "(sans nom)", address = it.address) }
+                        .map { PairedDevice(name = it.displayName(), address = it.address) }
                         .sortedBy { it.name.lowercase() },
                 )
             } catch (e: SecurityException) {
@@ -110,6 +112,17 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
         _testMessage.value = "$deviceName : connexion à Spotify…"
         val result = player.play(uri, foreground = true)
         _testMessage.value = "$deviceName : ${SpotifyController.describe(result)}"
+    }
+
+    /**
+     * Nom affiché dans les réglages Bluetooth d'Android : l'alias choisi par
+     * l'utilisateur (ex. « JBL de NICO ») s'il existe, sinon le nom diffusé par
+     * l'appareil (ex. « JBL Charge 5 »). getAlias() existe depuis Android 11.
+     */
+    @SuppressLint("MissingPermission")
+    private fun BluetoothDevice.displayName(): String {
+        val alias = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) alias else null
+        return alias ?: name ?: "(sans nom)"
     }
 
     fun setUri(macAddress: String, uri: String) = viewModelScope.launch {

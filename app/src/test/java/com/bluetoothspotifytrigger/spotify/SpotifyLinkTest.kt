@@ -54,6 +54,12 @@ class SpotifyLinkTest {
         assertTrue(SpotifyLink.parse("") is Result.Invalid)
     }
 
+    @Test fun `URI avec parametres de partage - nettoye`() =
+        assertEquals(
+            "spotify:playlist:1a2B3c4D5e6F7g8H9i0J1k",
+            valid("spotify:playlist:1a2B3c4D5e6F7g8H9i0J1k?si=abc123def456&pi=xyz789"),
+        )
+
     @Test fun `autre domaine refuse`() =
         assertTrue(SpotifyLink.parse("https://evil.com/playlist/$id") is Result.Invalid)
 }
