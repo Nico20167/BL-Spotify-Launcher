@@ -52,24 +52,41 @@ class SpotifyIntentPlayer(context: Context) {
      * ([SpotifySessionControl]). Si Spotify tourne déjà, on règle le mode
      * AVANT le lancement pour démarrer directement sur un titre au hasard.
      * Sinon (démarrage à froid, pas encore de session), on le règle une fois la
-     * lecture partie, puis on passe au titre suivant pour quitter le 1er titre.
+     * lecture partie.
+     *
+     * En aléatoire, on passe au titre suivant (donc au hasard) si la lecture
+     * n'a pas démarré « proprement » sur un titre au hasard :
+     * - démarrage à froid : l'aléatoire n'a été activé qu'après le 1er titre ;
+     * - reprise par la touche média : Spotify a ignoré `:play` (playlist déjà
+     *   chargée, en pause) et a simplement repris le titre en pause — observé
+     *   sur téléphone : « la même musique à chaque fois ».
+     * Sans aléatoire, une reprise est conservée (on continue là où on était).
      */
     suspend fun play(uri: String, volumePercent: Int? = null, shuffle: Boolean? = null): PlayResult {
         val shuffleSetBefore = shuffle?.let { session.setShuffle(it) } ?: false
-        val result = launch(uri, volumePercent)
-        if (result != PlayResult.Success) return result
+        val launch = launch(uri, volumePercent)
+        if (launch.result != PlayResult.Success) return launch.result
 
         volumePercent?.let { applyVolume(it) }
-        if (shuffle != null && !shuffleSetBefore) {
-            delay(SESSION_SETTLE_MS) // laisse la session Spotify fraîchement créée s'initialiser
-            if (session.setShuffle(shuffle)) {
-                if (shuffle) session.skipToNext()
-            } else if (!session.hasAccess()) {
+        if (shuffle == null) return launch.result
+
+        if (!shuffleSetBefore || launch.resumedByMediaKey) {
+            delay(SESSION_SETTLE_MS) // laisse la session Spotify s'initialiser / se stabiliser
+        }
+        if (!shuffleSetBefore && !session.setShuffle(shuffle)) {
+            if (!session.hasAccess()) {
                 Log.w(TAG, "Aléatoire demandé mais « Accès aux notifications » non accordé")
             }
+            return launch.result
         }
-        return result
+        if (shuffle && (!shuffleSetBefore || launch.resumedByMediaKey)) {
+            session.skipToNext()
+        }
+        return launch.result
     }
+
+    /** [resumedByMediaKey] : la lecture a démarré grâce à la touche média (reprise). */
+    private data class Launch(val result: PlayResult, val resumedByMediaKey: Boolean = false)
 
     private fun applyVolume(percent: Int) {
         val audio = appContext.getSystemService(AudioManager::class.java)
@@ -84,8 +101,8 @@ class SpotifyIntentPlayer(context: Context) {
         }
     }
 
-    private suspend fun launch(uri: String, volumePercent: Int?): PlayResult {
-        if (!isSpotifyInstalled()) return PlayResult.SpotifyNotInstalled
+    private suspend fun launch(uri: String, volumePercent: Int?): Launch {
+        if (!isSpotifyInstalled()) return Launch(PlayResult.SpotifyNotInstalled)
         volumePercent?.let { applyVolume(it) }
 
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("$uri:play"))
@@ -96,7 +113,7 @@ class SpotifyIntentPlayer(context: Context) {
         try {
             appContext.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            return PlayResult.SpotifyNotInstalled
+            return Launch(PlayResult.SpotifyNotInstalled)
         }
 
         // Pas d'exception si Android bloque le lancement en arrière-plan : il est
@@ -104,7 +121,7 @@ class SpotifyIntentPlayer(context: Context) {
         val audio = appContext.getSystemService(AudioManager::class.java)
         if (waitForMusic(audio, FIRST_WAIT_MS)) {
             Log.i(TAG, "Lecture confirmée (audio actif)")
-            return PlayResult.Success
+            return Launch(PlayResult.Success)
         }
 
         // Observé sur Pixel / Spotify 9.2 : si Spotify avait déjà ce contenu en
@@ -122,12 +139,12 @@ class SpotifyIntentPlayer(context: Context) {
             Log.i(TAG, "Pas de son : touche média Lecture (essai ${attempt + 1}/$MEDIA_KEY_ATTEMPTS)")
             sendMediaPlay(audio)
             if (waitForMusic(audio, MEDIA_KEY_INTERVAL_MS)) {
-                Log.i(TAG, "Lecture confirmée après touche média")
-                return PlayResult.Success
+                Log.i(TAG, "Lecture confirmée après touche média (reprise du titre en pause)")
+                return Launch(PlayResult.Success, resumedByMediaKey = true)
             }
         }
         Log.w(TAG, "Lecture non confirmée")
-        return PlayResult.NotConfirmed
+        return Launch(PlayResult.NotConfirmed)
     }
 
     private suspend fun waitForMusic(audio: AudioManager, timeoutMs: Long): Boolean {
