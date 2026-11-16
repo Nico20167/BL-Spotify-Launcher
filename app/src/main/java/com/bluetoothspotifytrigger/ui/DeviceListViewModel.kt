@@ -112,7 +112,8 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
     fun testPlay(device: DeviceUi) = viewModelScope.launch {
         val uri = device.spotifyUri ?: return@launch
         _testMessage.value = "${device.name} : ouverture de Spotify…"
-        val result = player.play(uri, device.volumePercent, device.shuffle)
+        // Test manuel : on force la lecture même si un son joue déjà.
+        val result = player.play(uri, device.volumePercent, device.shuffle, skipIfBusy = false)
         _testMessage.value = "${device.name} : ${result.describe()}"
     }
 

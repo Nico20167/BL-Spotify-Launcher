@@ -25,6 +25,7 @@ import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import com.bluetoothspotifytrigger.debug.DebugActions
 import com.bluetoothspotifytrigger.spotify.PlayResult
 import com.bluetoothspotifytrigger.spotify.describe
+import com.bluetoothspotifytrigger.spotify.isOk
 import com.bluetoothspotifytrigger.spotify.SpotifyIntentPlayer
 import com.bluetoothspotifytrigger.trigger.TriggerHandler
 import com.bluetoothspotifytrigger.ui.MainActivity
@@ -77,7 +78,7 @@ class BluetoothMonitorService : Service() {
     private fun reportOutcome(deviceName: String, outcome: TriggerHandler.Outcome) {
         if (outcome !is TriggerHandler.Outcome.Played) return
         val time = DateFormat.getTimeFormat(this).format(Date())
-        val ok = outcome.result == PlayResult.Success
+        val ok = outcome.result.isOk // « rien fait » (lecture déjà en cours) n'est pas un échec
         val summary = "$time · $deviceName → ${outcome.result.describe()}"
         ServiceState.setLastEvent(summary)
 

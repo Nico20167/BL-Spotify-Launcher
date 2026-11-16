@@ -62,7 +62,21 @@ class SpotifyIntentPlayer(context: Context) {
      *   sur téléphone : « la même musique à chaque fois ».
      * Sans aléatoire, une reprise est conservée (on continue là où on était).
      */
-    suspend fun play(uri: String, volumePercent: Int? = null, shuffle: Boolean? = null): PlayResult {
+    suspend fun play(
+        uri: String,
+        volumePercent: Int? = null,
+        shuffle: Boolean? = null,
+        skipIfBusy: Boolean = true,
+    ): PlayResult {
+        // Ne jamais interrompre : si un son joue déjà (morceau, podcast, vidéo…),
+        // il bascule tout seul sur l'appareil qui vient de se connecter. Idem
+        // pendant un appel. [skipIfBusy] = false pour le bouton « Tester ».
+        if (skipIfBusy) {
+            busyReason()?.let {
+                Log.i(TAG, "Rien fait : $it")
+                return PlayResult.Skipped(it)
+            }
+        }
         val shuffleSetBefore = shuffle?.let { session.setShuffle(it) } ?: false
         val launch = launch(uri, volumePercent)
         if (launch.result != PlayResult.Success) return launch.result
@@ -87,6 +101,18 @@ class SpotifyIntentPlayer(context: Context) {
 
     /** [resumedByMediaKey] : la lecture a démarré grâce à la touche média (reprise). */
     private data class Launch(val result: PlayResult, val resumedByMediaKey: Boolean = false)
+
+    /** Raison de ne rien faire (son déjà en cours, appel), ou null. */
+    private fun busyReason(): String? {
+        val audio = appContext.getSystemService(AudioManager::class.java)
+        return when {
+            audio.mode == AudioManager.MODE_IN_CALL ||
+                audio.mode == AudioManager.MODE_IN_COMMUNICATION ||
+                audio.mode == AudioManager.MODE_RINGTONE -> "appel en cours"
+            audio.isMusicActive -> "une lecture est déjà en cours"
+            else -> null
+        }
+    }
 
     private fun applyVolume(percent: Int) {
         val audio = appContext.getSystemService(AudioManager::class.java)
