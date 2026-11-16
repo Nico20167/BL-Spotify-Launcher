@@ -24,6 +24,9 @@ object DebugActions {
     /** Simule un ACTION_ACL_CONNECTED. Extras : [EXTRA_ADDRESS], [EXTRA_NAME]. */
     const val SIMULATE_ACL_CONNECTED = "com.bluetoothspotifytrigger.debug.SIMULATE_ACL_CONNECTED"
 
+    /** Simule la connexion du profil audio A2DP. Extras : [EXTRA_ADDRESS], [EXTRA_NAME]. */
+    const val SIMULATE_A2DP_CONNECTED = "com.bluetoothspotifytrigger.debug.SIMULATE_A2DP_CONNECTED"
+
     /** Affiche/masque des appareils appairés fictifs. Extra booléen : [EXTRA_ENABLED]. */
     const val SET_FAKE_DEVICES = "com.bluetoothspotifytrigger.debug.SET_FAKE_DEVICES"
 

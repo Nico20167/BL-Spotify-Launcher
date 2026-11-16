@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.text.format.DateFormat
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -38,23 +40,36 @@ import java.util.Date
  * Rôle : rester vivant en arrière-plan (notification persistante) pour pouvoir
  * écouter les connexions Bluetooth via un receiver enregistré dynamiquement.
  *
- * Chaque connexion (après débounce) est confiée au [TriggerHandler], qui
- * cherche l'URI Spotify associé à l'appareil.
+ * Les events Bluetooth passent par le [ConnectionCoordinator] (attente de
+ * l'audio A2DP, anti-doublons), puis au [TriggerHandler] qui cherche l'URI
+ * Spotify associé à l'appareil et lance la lecture.
  */
 class BluetoothMonitorService : Service() {
 
     // Scope lié à la vie du service : annulé dans onDestroy. SupervisorJob pour
     // qu'un échec de traitement d'une connexion n'empêche pas les suivantes.
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Thread principal : le coordinateur n'est pas thread-safe, et les receivers
+    // sont appelés sur Main. Les traitements longs sont suspendants (pas bloquants).
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var triggerHandler: TriggerHandler
 
-    private val onConnected: (String, String) -> Unit = { address, name ->
-        scope.launch {
-            runCatching { triggerHandler.onDeviceConnected(address, name) }
-                .onSuccess { reportOutcome(name, it) }
-                .onFailure { Log.e(TAG, "Erreur lors du traitement de $address", it) }
-        }
+    /** Attend l'audio A2DP avant de déclencher (voir ConnectionCoordinator). */
+    private val coordinator = ConnectionCoordinator(
+        scope = scope,
+        clock = SystemClock::elapsedRealtime,
+    ) { address, name ->
+        runCatching { triggerHandler.onDeviceConnected(address, name) }
+            .onSuccess { reportOutcome(name, it) }
+            .onFailure { Log.e(TAG, "Erreur lors du traitement de $address", it) }
     }
+
+    private val onBtEvent: (BtConnectionReceiver.Event, String, String) -> Unit =
+        { event, address, name ->
+            when (event) {
+                BtConnectionReceiver.Event.ACL -> coordinator.onAclConnected(address, name)
+                BtConnectionReceiver.Event.A2DP -> coordinator.onA2dpConnected(address, name)
+            }
+        }
 
     /** Met à jour la notification persistante ; alerte l'utilisateur en cas d'échec. */
     private fun reportOutcome(deviceName: String, outcome: TriggerHandler.Outcome) {
@@ -86,8 +101,8 @@ class BluetoothMonitorService : Service() {
 
     // Deux instances : la vraie écoute système, et (debug uniquement) la
     // simulation adb protégée par la permission DUMP.
-    private val receiver = BtConnectionReceiver(onConnected)
-    private val debugReceiver = BtConnectionReceiver(onConnected)
+    private val receiver = BtConnectionReceiver(onBtEvent)
+    private val debugReceiver = BtConnectionReceiver(onBtEvent)
     private val registeredReceivers = mutableListOf<BtConnectionReceiver>()
 
     override fun onCreate() {
@@ -121,8 +136,11 @@ class BluetoothMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun registerBtReceiver() {
-        val filter = IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED)
-        // ACL_CONNECTED est émis par le SYSTÈME (un autre UID), pas par notre app.
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+        }
+        // Ces broadcasts sont émis par le SYSTÈME (un autre UID), pas par notre app.
         // Sur Android 14+, un receiver context-enregistré qui écoute des broadcasts
         // du système doit être déclaré RECEIVER_EXPORTED, sinon ils sont filtrés.
         ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
@@ -134,7 +152,10 @@ class BluetoothMonitorService : Service() {
             ContextCompat.registerReceiver(
                 this,
                 debugReceiver,
-                IntentFilter(DebugActions.SIMULATE_ACL_CONNECTED),
+                IntentFilter().apply {
+                    addAction(DebugActions.SIMULATE_ACL_CONNECTED)
+                    addAction(DebugActions.SIMULATE_A2DP_CONNECTED)
+                },
                 DebugActions.PERMISSION,
                 null,
                 ContextCompat.RECEIVER_EXPORTED,

@@ -96,4 +96,6 @@ dependencies {
 
     // Tests unitaires JVM (logique pure, sans émulateur) : ./gradlew testDebugUnitTest
     testImplementation("junit:junit:4.13.2")
+    // Temps virtuel pour tester les délais (attente A2DP, cooldown) instantanément.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
