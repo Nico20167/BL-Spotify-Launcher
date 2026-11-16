@@ -69,6 +69,7 @@ class BluetoothMonitorService : Service() {
             when (event) {
                 BtConnectionReceiver.Event.ACL -> coordinator.onAclConnected(address, name)
                 BtConnectionReceiver.Event.A2DP -> coordinator.onA2dpConnected(address, name)
+                BtConnectionReceiver.Event.DISCONNECTED -> coordinator.onDisconnected(address, name)
             }
         }
 
@@ -139,6 +140,7 @@ class BluetoothMonitorService : Service() {
     private fun registerBtReceiver() {
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
         }
         // Ces broadcasts sont émis par le SYSTÈME (un autre UID), pas par notre app.
@@ -156,6 +158,7 @@ class BluetoothMonitorService : Service() {
                 IntentFilter().apply {
                     addAction(DebugActions.SIMULATE_ACL_CONNECTED)
                     addAction(DebugActions.SIMULATE_A2DP_CONNECTED)
+                    addAction(DebugActions.SIMULATE_ACL_DISCONNECTED)
                 },
                 DebugActions.PERMISSION,
                 null,

@@ -167,22 +167,43 @@ fun DeviceListScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 } else {
-                    Text(
-                        "${s.devices.size} appareil(s) appairé(s) :",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    // Appareils déjà associés à une playlist en tête, dans leur propre section.
+                    val (configured, others) = s.devices.partition { it.spotifyUri != null }
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(s.devices, key = { it.address }) { device ->
-                            DeviceCard(
-                                device = device,
-                                onEdit = { editing = device },
-                                onTest = { viewModel.testPlay(device) },
-                            )
+                        if (configured.isNotEmpty()) {
+                            item(key = "header_configured") {
+                                SectionHeader("Configurés (${configured.size})")
+                            }
+                            items(configured, key = { it.address }) { device ->
+                                DeviceCard(
+                                    device = device,
+                                    onEdit = { editing = device },
+                                    onTest = { viewModel.testPlay(device) },
+                                )
+                            }
+                        }
+                        if (others.isNotEmpty()) {
+                            item(key = "header_others") {
+                                SectionHeader(
+                                    if (configured.isEmpty()) {
+                                        "Appareils appairés (${others.size})"
+                                    } else {
+                                        "Autres appareils appairés (${others.size})"
+                                    },
+                                )
+                            }
+                            items(others, key = { it.address }) { device ->
+                                DeviceCard(
+                                    device = device,
+                                    onEdit = { editing = device },
+                                    onTest = { viewModel.testPlay(device) },
+                                )
+                            }
                         }
                     }
                 }
@@ -236,6 +257,16 @@ private fun BluetoothPermissionNeeded(
             Text("Autoriser le Bluetooth")
         }
     }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+    )
 }
 
 @Composable

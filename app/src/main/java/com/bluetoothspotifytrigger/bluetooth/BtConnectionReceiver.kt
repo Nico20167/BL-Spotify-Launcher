@@ -15,7 +15,8 @@ import com.bluetoothspotifytrigger.debug.DebugActions
  * Traduit les broadcasts Bluetooth bruts en events simples pour le
  * [ConnectionCoordinator] (qui décide quand déclencher) :
  * - ACTION_ACL_CONNECTED → lien radio établi ([Event.ACL]),
- * - A2DP CONNECTION_STATE_CHANGED à STATE_CONNECTED → audio prêt ([Event.A2DP]).
+ * - A2DP CONNECTION_STATE_CHANGED à STATE_CONNECTED → audio prêt ([Event.A2DP]),
+ * - ACTION_ACL_DISCONNECTED → appareil parti ([Event.DISCONNECTED]).
  *
  * Doit être enregistré DYNAMIQUEMENT (registerReceiver), pas dans le manifest :
  * depuis Android 8 (API 26), ces broadcasts ne sont plus délivrés aux
@@ -29,7 +30,7 @@ class BtConnectionReceiver(
     private val onEvent: (event: Event, address: String, name: String) -> Unit,
 ) : BroadcastReceiver() {
 
-    enum class Event { ACL, A2DP }
+    enum class Event { ACL, A2DP, DISCONNECTED }
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
@@ -44,7 +45,12 @@ class BtConnectionReceiver(
                 dispatch(Event.A2DP, device.address ?: return, device.safeName())
             }
             DebugActions.SIMULATE_ACL_CONNECTED -> simulated(Event.ACL, intent)
+            BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                val device = intent.bluetoothDevice() ?: return
+                dispatch(Event.DISCONNECTED, device.address ?: return, device.safeName())
+            }
             DebugActions.SIMULATE_A2DP_CONNECTED -> simulated(Event.A2DP, intent)
+            DebugActions.SIMULATE_ACL_DISCONNECTED -> simulated(Event.DISCONNECTED, intent)
         }
     }
 
@@ -58,7 +64,7 @@ class BtConnectionReceiver(
     }
 
     private fun dispatch(event: Event, address: String, name: String) {
-        Log.i(TAG, "$event connecté : $name [$address]")
+        Log.i(TAG, "$event : $name [$address]")
         onEvent(event, address, name)
     }
 
