@@ -22,17 +22,21 @@ Spécification et choix techniques : [`CLAUDE.md`](./CLAUDE.md).
    l'installation d'applications inconnues pour l'app utilisée (Fichiers,
    Drive, WhatsApp…) : accepter. Google Play Protect peut afficher un
    avertissement « app inconnue » : choisir « Installer quand même ».
-3. Ouvrir **BT Spotify Trigger** :
-   - onglet **Permissions** → « Demander les permissions » (Bluetooth,
-     notifications) ;
-   - onglet **Service** → « Autoriser l'affichage par-dessus » (indispensable :
-     c'est ce qui permet d'ouvrir Spotify téléphone verrouillé),
-     « Désactiver l'optimisation batterie », puis « Démarrer le service » ;
-   - onglet **Appareils** → sur l'appareil voulu, « Associer une playlist » :
-     coller le lien Spotify (dans Spotify : Partager → Copier le lien), régler
-     le volume de départ si souhaité, puis « Tester ».
-4. C'est tout : le service tourne en arrière-plan (notification persistante) et
-   redémarre seul après un redémarrage du téléphone.
+3. Ouvrir **BT Spotify Trigger**, onglet **Configuration**, dans l'ordre :
+   1. « Demander les permissions » (Bluetooth, notifications) ;
+   2. autorisations spéciales : « Afficher par-dessus les autres apps »
+      (**indispensable** : permet d'ouvrir Spotify téléphone verrouillé),
+      « Ignorer l'optimisation batterie » (recommandé), « Accès aux
+      notifications » (facultatif, uniquement pour la lecture aléatoire —
+      si l'option est grisée : Infos de l'appli → ⋮ → « Autoriser les
+      paramètres restreints ») ;
+   3. « Démarrer la surveillance ».
+4. Onglet **Appareils** → sur l'appareil voulu, « Associer une playlist » :
+   coller le lien Spotify (dans Spotify : Partager → Copier le lien), régler
+   si souhaité le volume de départ et la lecture aléatoire, puis « Tester ».
+5. C'est tout : la surveillance tourne en arrière-plan (notification
+   persistante) et redémarre seule après un redémarrage du téléphone. Si un
+   son joue déjà quand l'appareil se connecte, l'app ne fait rien.
 
 Prérequis : Android 8.0+, application Spotify installée et connectée.
 

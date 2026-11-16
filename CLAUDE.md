@@ -28,10 +28,13 @@ Doit pouvoir être **partagée à des amis** (APK) sans qu'ils aient besoin d'un
 - **Ouverture depuis l'arrière-plan** (Android 10+ l'interdit) : exemption via la permission spéciale « Afficher par-dessus les autres apps » (`SYSTEM_ALERT_WINDOW`, accordée par l'utilisateur).
 - **Spotify ignore parfois `:play`** (contenu déjà en mémoire) et, téléphone verrouillé, ne peut pas démarrer son service de lecture seul : l'app envoie alors la touche média `PLAY` (qui accorde à Spotify une autorisation temporaire de démarrer) toutes les 3 s jusqu'à ce qu'un son soit détecté (`AudioManager.isMusicActive`).
 - **Volume** : `STREAM_MUSIC` réglé avant le lancement puis réappliqué après confirmation (Android peut restaurer le volume mémorisé de l'appareil à la connexion).
+- **Aléatoire** : via la session média de Spotify (`MediaControllerCompat.setShuffleMode`), qui exige l'autorisation « Accès aux notifications » (`MediaAccessListener`, service vide). Si la lecture a démarré par reprise du titre en pause (touche média) ou à froid, passage au titre suivant pour partir au hasard.
+- **Ne jamais interrompre** : si un son joue déjà (`isMusicActive`) ou pendant un appel, rien n'est fait (le son en cours bascule seul sur l'appareil). Le bouton « Tester » force la lecture.
 
 ### Détection Bluetooth
 - Receiver **enregistré dynamiquement** dans un **foreground service** (`connectedDevice`) : `ACTION_ACL_CONNECTED` + A2DP `CONNECTION_STATE_CHANGED`.
-- **Attente de l'A2DP** : l'ACL arrive avant que l'audio soit prêt ; on déclenche à la connexion A2DP, ou 8 s après l'ACL si l'A2DP ne vient pas. **Cooldown 60 s** par appareil (doublons, micro-coupures).
+- **Attente de l'A2DP** : l'ACL arrive avant que l'audio soit prêt ; on déclenche à la connexion A2DP, ou 8 s après l'ACL si l'A2DP ne vient pas (ex. écouteurs LE Audio).
+- **Une fois par connexion** : `ACL_DISCONNECTED` suivi ; reconnexion < 5 s = micro-coupure ignorée ; déclenchements sérialisés (Mutex) si plusieurs appareils se connectent ensemble.
 - Appareils affichés sous leur **alias** (nom donné par l'utilisateur dans Android).
 
 ### Persistance
@@ -87,7 +90,10 @@ app/src/debug/                       # Receiver de commandes adb (build debug un
 - [x] Foreground service avec notification ; relance après reboot et mise à jour.
 - [x] Connexion réelle de l'appareil → bon contenu lancé, téléphone verrouillé (validé : JBL, Pixel 9 Pro XL).
 - [x] Spotify absent / lecture non confirmée → notification d'alerte explicite.
-- [ ] Volume au démarrage validé sur téléphone réel.
+- [x] Volume au démarrage validé sur téléphone réel.
+- [x] Lecture aléatoire par appareil (titre différent à chaque reconnexion), téléphone verrouillé.
+- [x] Ne rien faire si un son joue déjà (ou appel en cours) à la connexion.
+- [x] Reconnexion rapide (enceinte éteinte/rallumée) → nouveau déclenchement ; micro-coupure (< 5 s) ignorée.
 - [ ] Validé sur un second téléphone (autre marque / version d'Android).
 - [ ] Validé en voiture (autoradio).
 
