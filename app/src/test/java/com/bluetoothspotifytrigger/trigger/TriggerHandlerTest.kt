@@ -40,9 +40,9 @@ class TriggerHandlerTest {
             tmp.newFile("triggers.preferences_pb").also { it.delete() }
         }
         repository = TriggerRepository(dataStore)
-        handler = TriggerHandler(repository) { uri, volume ->
+        handler = TriggerHandler(repository) { uri, config ->
             played += uri
-            volumes += volume
+            volumes += config.volumePercent
             nextResult
         }
     }
@@ -54,6 +54,19 @@ class TriggerHandlerTest {
         )
         handler.onDeviceConnected("02:00:00:00:00:01", "Autoradio")
         assertEquals(listOf<Int?>(40), volumes)
+    }
+
+    @Test fun `reglages complets persistes et relus`() = runBlocking {
+        val mac = "02:00:00:00:00:01"
+        val config = DeviceConfig("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", volumePercent = 30, shuffle = true)
+        repository.setConfig(mac, config)
+        assertEquals(config, repository.configs.first()[mac])
+
+        repository.setConfig(mac, config.copy(shuffle = false))
+        assertEquals(false, repository.configs.first()[mac]?.shuffle)
+
+        repository.clear(mac)
+        assertEquals(null, repository.configs.first()[mac])
     }
 
     @Test fun `volume non configure - null (volume inchange)`() = runBlocking {

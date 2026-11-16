@@ -29,6 +29,7 @@ data class DeviceUi(
     val address: String,
     val spotifyUri: String?,
     val volumePercent: Int? = null,
+    val shuffle: Boolean? = null,
 )
 
 sealed interface DeviceListUiState {
@@ -70,6 +71,7 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
                             address = device.address,
                             spotifyUri = configs[device.address]?.uri,
                             volumePercent = configs[device.address]?.volumePercent,
+                            shuffle = configs[device.address]?.shuffle,
                         )
                     },
                 )
@@ -110,7 +112,7 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
     fun testPlay(device: DeviceUi) = viewModelScope.launch {
         val uri = device.spotifyUri ?: return@launch
         _testMessage.value = "${device.name} : ouverture de Spotify…"
-        val result = player.play(uri, device.volumePercent)
+        val result = player.play(uri, device.volumePercent, device.shuffle)
         _testMessage.value = "${device.name} : ${result.describe()}"
     }
 
@@ -125,9 +127,10 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
         return alias ?: name ?: "(sans nom)"
     }
 
-    fun setConfig(macAddress: String, uri: String, volumePercent: Int?) = viewModelScope.launch {
-        repository.setConfig(macAddress, DeviceConfig(uri, volumePercent))
-    }
+    fun setConfig(macAddress: String, uri: String, volumePercent: Int?, shuffle: Boolean?) =
+        viewModelScope.launch {
+            repository.setConfig(macAddress, DeviceConfig(uri, volumePercent, shuffle))
+        }
 
     fun clear(macAddress: String) = viewModelScope.launch {
         repository.clear(macAddress)

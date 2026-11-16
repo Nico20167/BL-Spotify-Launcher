@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val tabs = listOf("Permissions", "Appareils", "Service")
+private val tabs = listOf("Configuration", "Appareils")
 
 @Composable
 private fun AppRoot() {
@@ -60,9 +60,8 @@ private fun AppRoot() {
             }
         }
         when (selectedTab) {
-            0 -> PermissionsScreen(Modifier.fillMaxSize())
-            1 -> DeviceListScreen(Modifier.fillMaxSize())
-            2 -> ServiceScreen(Modifier.fillMaxSize())
+            0 -> ConfigurationScreen(Modifier.fillMaxSize())
+            else -> DeviceListScreen(Modifier.fillMaxSize())
         }
     }
 }

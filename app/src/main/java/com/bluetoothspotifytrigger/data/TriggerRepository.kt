@@ -12,10 +12,14 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-/** Réglages d'un appareil : quoi jouer, et à quel volume (null = ne pas toucher). */
+/**
+ * Réglages d'un appareil : quoi jouer, à quel volume, en aléatoire ou non.
+ * null = ne pas toucher au réglage actuel du téléphone / de Spotify.
+ */
 data class DeviceConfig(
     val uri: String,
     val volumePercent: Int? = null,
+    val shuffle: Boolean? = null,
 )
 
 /**
@@ -41,7 +45,8 @@ class TriggerRepository(private val dataStore: DataStore<Preferences>) {
             if (!key.name.startsWith(URI_PREFIX) || value !is String) return@mapNotNull null
             val mac = key.name.removePrefix(URI_PREFIX)
             val volume = entries[intPreferencesKey(VOLUME_PREFIX + mac)] as? Int
-            mac to DeviceConfig(uri = value, volumePercent = volume)
+            val shuffle = entries[booleanPreferencesKey(SHUFFLE_PREFIX + mac)] as? Boolean
+            mac to DeviceConfig(uri = value, volumePercent = volume, shuffle = shuffle)
         }.toMap()
     }
 
@@ -52,6 +57,11 @@ class TriggerRepository(private val dataStore: DataStore<Preferences>) {
                 it[volumeKey(macAddress)] = config.volumePercent.coerceIn(0, 100)
             } else {
                 it.remove(volumeKey(macAddress))
+            }
+            if (config.shuffle != null) {
+                it[shuffleKey(macAddress)] = config.shuffle
+            } else {
+                it.remove(shuffleKey(macAddress))
             }
         }
     }
@@ -65,11 +75,13 @@ class TriggerRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit {
             it.remove(uriKey(macAddress))
             it.remove(volumeKey(macAddress))
+            it.remove(shuffleKey(macAddress))
         }
     }
 
     private fun uriKey(macAddress: String) = stringPreferencesKey(URI_PREFIX + macAddress)
     private fun volumeKey(macAddress: String) = intPreferencesKey(VOLUME_PREFIX + macAddress)
+    private fun shuffleKey(macAddress: String) = booleanPreferencesKey(SHUFFLE_PREFIX + macAddress)
 
     /** Debug : afficher des appareils appairés fictifs (voir DebugActions). */
     val fakeDevicesEnabled: Flow<Boolean> = safeData.map { it[FAKE_DEVICES_KEY] ?: false }
@@ -82,6 +94,7 @@ class TriggerRepository(private val dataStore: DataStore<Preferences>) {
         // "device_uri:" : préfixe historique, conservé pour garder les associations existantes.
         private const val URI_PREFIX = "device_uri:"
         private const val VOLUME_PREFIX = "device_volume:"
+        private const val SHUFFLE_PREFIX = "device_shuffle:"
         private val FAKE_DEVICES_KEY = booleanPreferencesKey("debug_fake_devices")
     }
 }

@@ -112,7 +112,7 @@ class BluetoothMonitorService : Service() {
         triggerHandler = TriggerHandler(
             repository = TriggerRepository(applicationContext.triggerDataStore),
             // Volume et URI par appareil (voir DeviceConfig).
-            play = { uri, volume -> player.play(uri, volume) },
+            play = { uri, config -> player.play(uri, config.volumePercent, config.shuffle) },
         )
         createNotificationChannel()
         startAsForeground()

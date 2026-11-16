@@ -39,16 +39,34 @@ class SpotifyIntentPlayer(context: Context) {
         false
     }
 
+    private val session = SpotifySessionControl(appContext)
+
     /**
-     * Lance [uri] dans Spotify. Si [volumePercent] est fourni, règle le volume
-     * média avant le lancement, puis le réapplique une fois la lecture
-     * confirmée : à la connexion, Android peut restaurer le volume mémorisé
-     * pour l'appareil Bluetooth juste après notre premier réglage.
+     * Lance [uri] dans Spotify.
+     *
+     * [volumePercent] (null = inchangé) : réglé avant le lancement, puis
+     * réappliqué une fois la lecture confirmée (à la connexion, Android peut
+     * restaurer le volume mémorisé de l'appareil juste après notre réglage).
+     *
+     * [shuffle] (null = inchangé) : nécessite l'accès aux sessions média
+     * ([SpotifySessionControl]). Si Spotify tourne déjà, on règle le mode
+     * AVANT le lancement pour démarrer directement sur un titre au hasard.
+     * Sinon (démarrage à froid, pas encore de session), on le règle une fois la
+     * lecture partie, puis on passe au titre suivant pour quitter le 1er titre.
      */
-    suspend fun play(uri: String, volumePercent: Int? = null): PlayResult {
+    suspend fun play(uri: String, volumePercent: Int? = null, shuffle: Boolean? = null): PlayResult {
+        val shuffleSetBefore = shuffle?.let { session.setShuffle(it) } ?: false
         val result = launch(uri, volumePercent)
-        if (result == PlayResult.Success && volumePercent != null) {
-            applyVolume(volumePercent)
+        if (result != PlayResult.Success) return result
+
+        volumePercent?.let { applyVolume(it) }
+        if (shuffle != null && !shuffleSetBefore) {
+            delay(SESSION_SETTLE_MS) // laisse la session Spotify fraîchement créée s'initialiser
+            if (session.setShuffle(shuffle)) {
+                if (shuffle) session.skipToNext()
+            } else if (!session.hasAccess()) {
+                Log.w(TAG, "Aléatoire demandé mais « Accès aux notifications » non accordé")
+            }
         }
         return result
     }
@@ -131,6 +149,7 @@ class SpotifyIntentPlayer(context: Context) {
         const val TAG = "SpotifyIntentPlayer"
         const val SPOTIFY_PACKAGE = "com.spotify.music"
         private const val POLL_MS = 250L
+        private const val SESSION_SETTLE_MS = 500L
         private const val FIRST_WAIT_MS = 4_000L
         private const val MEDIA_KEY_ATTEMPTS = 6
         private const val MEDIA_KEY_INTERVAL_MS = 3_000L

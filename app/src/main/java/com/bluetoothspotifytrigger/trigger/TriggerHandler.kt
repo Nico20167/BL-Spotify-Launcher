@@ -1,6 +1,7 @@
 package com.bluetoothspotifytrigger.trigger
 
 import android.util.Log
+import com.bluetoothspotifytrigger.data.DeviceConfig
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.spotify.PlayResult
 import com.bluetoothspotifytrigger.spotify.SpotifyLink
@@ -16,8 +17,8 @@ import kotlinx.coroutines.flow.first
  */
 class TriggerHandler(
     private val repository: TriggerRepository,
-    /** Lance la lecture de l'URI ; [volumePercent] null = ne pas toucher au volume. */
-    private val play: suspend (uri: String, volumePercent: Int?) -> PlayResult,
+    /** Lance la lecture de l'URI (normalisé) avec les réglages de l'appareil. */
+    private val play: suspend (uri: String, config: DeviceConfig) -> PlayResult,
 ) {
 
     sealed interface Outcome {
@@ -38,8 +39,12 @@ class TriggerHandler(
             Log.w(TAG, "URI enregistré invalide pour $name : $stored")
             return Outcome.Played(stored, PlayResult.Error("URI invalide : $stored (à corriger dans l'app)"))
         }
-        Log.i(TAG, "Association trouvée pour $name [$address] -> $uri (volume : ${config.volumePercent ?: "inchangé"})")
-        val result = play(uri, config.volumePercent)
+        Log.i(
+            TAG,
+            "Association trouvée pour $name [$address] -> $uri " +
+                "(volume : ${config.volumePercent ?: "inchangé"}, aléatoire : ${config.shuffle ?: "inchangé"})",
+        )
+        val result = play(uri, config)
         Log.i(TAG, "Résultat pour $name : $result")
         return Outcome.Played(uri, result)
     }

@@ -56,6 +56,19 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Écoute de notifications VIDE : sert uniquement de « clé » pour accéder
+             aux sessions média (mode aléatoire de Spotify). Activé par l'utilisateur
+             via « Accès aux notifications ». -->
+        <service
+            android:name=".spotify.MediaAccessListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!-- BOOT_COMPLETED / MY_PACKAGE_REPLACED sont des broadcasts protégés
              (émis par le système uniquement) : exported="true" sans risque. -->
         <receiver

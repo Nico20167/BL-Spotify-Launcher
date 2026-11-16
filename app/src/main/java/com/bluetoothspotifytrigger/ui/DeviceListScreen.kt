@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bluetoothspotifytrigger.data.local.AppPrefs
 import com.bluetoothspotifytrigger.spotify.SpotifyLink
+import com.bluetoothspotifytrigger.spotify.SpotifySessionControl
 import kotlin.math.roundToInt
 
 @Composable
@@ -199,8 +200,8 @@ fun DeviceListScreen(
         UriEditDialog(
             device = device,
             onDismiss = { editing = null },
-            onSave = { uri, volume ->
-                viewModel.setConfig(device.address, uri, volume)
+            onSave = { uri, volume, shuffle ->
+                viewModel.setConfig(device.address, uri, volume, shuffle)
                 editing = null
             },
             onClear = {
@@ -255,8 +256,17 @@ private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: () -> Unit)
             )
             if (device.spotifyUri != null) {
                 Text(
-                    text = device.volumePercent?.let { "Volume au démarrage : $it %" }
-                        ?: "Volume : inchangé",
+                    text = buildString {
+                        append(device.volumePercent?.let { "Volume : $it %" } ?: "Volume : inchangé")
+                        append(" · Aléatoire : ")
+                        append(
+                            when (device.shuffle) {
+                                true -> "oui"
+                                false -> "non"
+                                null -> "inchangé"
+                            },
+                        )
+                    },
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -277,10 +287,14 @@ private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: () -> Unit)
 private fun UriEditDialog(
     device: DeviceUi,
     onDismiss: () -> Unit,
-    onSave: (uri: String, volumePercent: Int?) -> Unit,
+    onSave: (uri: String, volumePercent: Int?, shuffle: Boolean) -> Unit,
     onClear: () -> Unit,
 ) {
+    val context = LocalContext.current
     var text by remember { mutableStateOf(device.spotifyUri ?: "") }
+    var shuffle by remember { mutableStateOf(device.shuffle ?: false) }
+    // Le mode aléatoire passe par la session média de Spotify : il faut l'accès aux notifications.
+    val sessionAccess = remember { SpotifySessionControl(context).hasAccess() }
     // Volume au démarrage : désactivé = on ne touche pas au volume.
     var volumeEnabled by remember { mutableStateOf(device.volumePercent != null) }
     var volume by remember { mutableFloatStateOf((device.volumePercent ?: 50).toFloat()) }
@@ -333,13 +347,32 @@ private fun UriEditDialog(
                         steps = 19, // pas de 5 %
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Lecture aléatoire",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = shuffle, onCheckedChange = { shuffle = it })
+                }
+                if (!sessionAccess) {
+                    Text(
+                        "Nécessite « Accès aux notifications » (onglet Configuration). " +
+                            "Sans lui, l'ordre de lecture reste celui de Spotify.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     (parsed as? SpotifyLink.Result.Valid)?.let {
-                        onSave(it.uri, if (volumeEnabled) volume.roundToInt() else null)
+                        onSave(it.uri, if (volumeEnabled) volume.roundToInt() else null, shuffle)
                     }
                 },
                 enabled = parsed is SpotifyLink.Result.Valid,
