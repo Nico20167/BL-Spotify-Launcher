@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.data.local.AppPrefs
+import com.bluetoothspotifytrigger.spotify.PlaybackMode
 import com.bluetoothspotifytrigger.spotify.SpotifyLink
 
 @Composable
@@ -102,7 +103,9 @@ fun DeviceListScreen(
             style = MaterialTheme.typography.headlineSmall,
         )
 
-        if (BuildConfig.SPOTIFY_CLIENT_ID.isBlank()) {
+        if (BuildConfig.SPOTIFY_CLIENT_ID.isBlank() &&
+            AppPrefs(context).playbackMode == PlaybackMode.SDK
+        ) {
             Text(
                 "Client ID Spotify non configuré : la lecture ne fonctionnera pas " +
                     "(renseigner SPOTIFY_CLIENT_ID dans local.properties puis rebuild).",

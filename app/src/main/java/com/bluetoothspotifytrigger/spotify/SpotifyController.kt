@@ -46,6 +46,8 @@ class SpotifyController(context: Context) {
         data object Offline : PlayResult
         data object SpotifyTooOld : PlayResult
         data object Timeout : PlayResult
+        /** Mode sans SDK : intent envoyé mais aucun son détecté ensuite. */
+        data object NotConfirmed : PlayResult
         data class Error(val message: String) : PlayResult
     }
 
@@ -133,6 +135,9 @@ class SpotifyController(context: Context) {
             PlayResult.Offline -> "Spotify est en mode hors connexion."
             PlayResult.SpotifyTooOld -> "Mets à jour l'app Spotify."
             PlayResult.Timeout -> "Spotify ne répond pas (délai dépassé)."
+            PlayResult.NotConfirmed ->
+                "Lecture non confirmée (aucun son détecté). En arrière-plan, vérifie " +
+                    "l'autorisation « Afficher par-dessus les autres apps »."
             is PlayResult.Error -> "Erreur Spotify : ${result.message}"
         }
     }

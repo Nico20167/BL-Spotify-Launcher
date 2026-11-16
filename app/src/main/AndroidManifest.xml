@@ -25,6 +25,17 @@
          exigerait de justifier cette permission. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Mode sans SDK : « Afficher par-dessus les autres apps » est l'exemption
+         qui autorise l'ouverture de Spotify depuis l'arrière-plan (Android 10+).
+         Accordée manuellement par l'utilisateur dans les réglages. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Android 11+ : visibilité de l'app Spotify (détection d'installation).
+         Le .aar du SDK le déclare aussi, mais le mode sans SDK ne doit pas en dépendre. -->
+    <queries>
+        <package android:name="com.spotify.music" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"

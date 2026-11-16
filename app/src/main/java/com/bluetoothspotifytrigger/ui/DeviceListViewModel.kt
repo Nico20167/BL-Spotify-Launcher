@@ -10,6 +10,7 @@ import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.bluetooth.PairedDevice
 import com.bluetoothspotifytrigger.debug.DebugActions
 import com.bluetoothspotifytrigger.spotify.SpotifyController
+import com.bluetoothspotifytrigger.spotify.SpotifyPlayer
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,7 +95,7 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private val spotify = SpotifyController(application)
+    private val player = SpotifyPlayer(application)
 
     /** Résultat du dernier test de lecture (null = aucun / en cours masqué). */
     private val _testMessage = MutableStateFlow<String?>(null)
@@ -107,7 +108,7 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun testPlay(deviceName: String, uri: String) = viewModelScope.launch {
         _testMessage.value = "$deviceName : connexion à Spotify…"
-        val result = spotify.connectAndPlay(uri, allowAuthUi = true)
+        val result = player.play(uri, foreground = true)
         _testMessage.value = "$deviceName : ${SpotifyController.describe(result)}"
     }
 

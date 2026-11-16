@@ -1,6 +1,7 @@
 package com.bluetoothspotifytrigger.data.local
 
 import android.content.Context
+import com.bluetoothspotifytrigger.spotify.PlaybackMode
 
 /**
  * Petits réglages techniques lus de façon SYNCHRONE (SharedPreferences),
@@ -24,6 +25,13 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_SERVICE_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_SERVICE_ENABLED, value).apply()
 
+    /** Moteur de lecture choisi (SDK Spotify ou prototype sans SDK). */
+    var playbackMode: PlaybackMode
+        get() = prefs.getString(KEY_PLAYBACK_MODE, null)
+            ?.let { runCatching { PlaybackMode.valueOf(it) }.getOrNull() }
+            ?: PlaybackMode.SDK
+        set(value) = prefs.edit().putString(KEY_PLAYBACK_MODE, value.name).apply()
+
     /**
      * Permissions déjà demandées au moins une fois. Android ne fournit pas cette
      * info : sans elle, impossible de distinguer « jamais demandée » de
@@ -41,5 +49,6 @@ class AppPrefs(context: Context) {
     private companion object {
         const val KEY_SERVICE_ENABLED = "service_enabled"
         const val KEY_REQUESTED = "requested_permissions"
+        const val KEY_PLAYBACK_MODE = "playback_mode"
     }
 }

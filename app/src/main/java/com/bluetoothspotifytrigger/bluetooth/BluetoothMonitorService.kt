@@ -22,6 +22,7 @@ import com.bluetoothspotifytrigger.data.local.AppPrefs
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import com.bluetoothspotifytrigger.debug.DebugActions
 import com.bluetoothspotifytrigger.spotify.SpotifyController
+import com.bluetoothspotifytrigger.spotify.SpotifyPlayer
 import com.bluetoothspotifytrigger.trigger.TriggerHandler
 import com.bluetoothspotifytrigger.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -91,11 +92,11 @@ class BluetoothMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val spotify = SpotifyController(this)
+        val player = SpotifyPlayer(this)
         triggerHandler = TriggerHandler(
             repository = TriggerRepository(applicationContext.triggerDataStore),
             // Arrière-plan : pas d'écran d'autorisation possible (voir SpotifyController).
-            play = { uri -> spotify.connectAndPlay(uri, allowAuthUi = false) },
+            play = { uri -> player.play(uri, foreground = false) },
         )
         createNotificationChannel()
         startAsForeground()
