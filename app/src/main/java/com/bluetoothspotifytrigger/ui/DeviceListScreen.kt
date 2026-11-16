@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bluetoothspotifytrigger.BuildConfig
+import com.bluetoothspotifytrigger.data.local.AppPrefs
 import com.bluetoothspotifytrigger.spotify.SpotifyLink
 
 @Composable
@@ -59,7 +60,7 @@ fun DeviceListScreen(
     val needsBtPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     var refreshKey by remember { mutableIntStateOf(0) }
-    var requestedBt by remember { mutableStateOf(false) }
+    val prefs = remember { AppPrefs(context) }
 
     // Appareil en cours d'édition d'URI (null = aucun dialogue ouvert).
     var editing by remember { mutableStateOf<DeviceUi?>(null) }
@@ -77,7 +78,6 @@ fun DeviceListScreen(
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {
-        requestedBt = true
         refreshKey++
     }
 
@@ -116,13 +116,17 @@ fun DeviceListScreen(
         }
 
         if (!btGranted) {
-            val permanentlyDenied = needsBtPermission && requestedBt && activity != null &&
+            val permanentlyDenied = needsBtPermission && activity != null &&
+                prefs.wasRequested(Manifest.permission.BLUETOOTH_CONNECT) &&
                 !ActivityCompat.shouldShowRequestPermissionRationale(
                     activity, Manifest.permission.BLUETOOTH_CONNECT,
                 )
             BluetoothPermissionNeeded(
                 permanentlyDenied = permanentlyDenied,
-                onRequest = { launcher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+                onRequest = {
+                    prefs.markRequested(listOf(Manifest.permission.BLUETOOTH_CONNECT))
+                    launcher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                },
                 onOpenSettings = { openAppSettings(context) },
             )
             return@Column

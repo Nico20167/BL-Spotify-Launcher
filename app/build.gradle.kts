@@ -59,6 +59,11 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        // En test unitaire JVM, les classes Android (ex. android.util.Log) sont
+        // des bouchons qui lèvent une exception : on leur fait renvoyer 0/null.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {

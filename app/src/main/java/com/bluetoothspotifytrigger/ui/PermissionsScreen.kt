@@ -24,7 +24,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +35,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.bluetoothspotifytrigger.data.local.AppPrefs
 import com.bluetoothspotifytrigger.permissions.AppPermissions
 
 private enum class PermStatus { GRANTED, DENIED, PERMANENTLY_DENIED, NOT_REQUESTED }
@@ -57,8 +57,9 @@ fun PermissionsScreen(modifier: Modifier = Modifier) {
     // et à chaque résultat de demande, pour relire l'état réel des permissions.
     var refreshKey by remember { mutableIntStateOf(0) }
     // Permissions déjà demandées au moins une fois (pour distinguer
-    // "jamais demandé" de "refusé définitivement").
-    val requested = remember { mutableStateListOf<String>() }
+    // "jamais demandé" de "refusé définitivement"). Persisté : survit au
+    // redémarrage de l'app.
+    val prefs = remember { AppPrefs(context) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         refreshKey++
@@ -70,14 +71,14 @@ fun PermissionsScreen(modifier: Modifier = Modifier) {
         refreshKey++
     }
 
-    val rows = remember(refreshKey, requested.size) {
+    val rows = remember(refreshKey) {
         required.map { info ->
             val granted = ContextCompat.checkSelfPermission(context, info.permission) ==
                 PackageManager.PERMISSION_GRANTED
             val showRationale = activity?.let {
                 ActivityCompat.shouldShowRequestPermissionRationale(it, info.permission)
             } ?: false
-            val wasRequested = requested.contains(info.permission)
+            val wasRequested = prefs.wasRequested(info.permission)
 
             val status = when {
                 granted -> PermStatus.GRANTED
@@ -128,7 +129,7 @@ fun PermissionsScreen(modifier: Modifier = Modifier) {
         Button(
             onClick = {
                 val toRequest = missing.map { it.permission }
-                toRequest.forEach { if (!requested.contains(it)) requested.add(it) }
+                prefs.markRequested(toRequest)
                 launcher.launch(toRequest.toTypedArray())
             },
             enabled = !allGranted,

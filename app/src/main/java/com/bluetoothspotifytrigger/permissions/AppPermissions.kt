@@ -1,7 +1,10 @@
 package com.bluetoothspotifytrigger.permissions
 
 import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 
 /**
  * Source de vérité des permissions runtime dont l'app a besoin, calculée
@@ -41,5 +44,10 @@ object AppPermissions {
         }
 
         return list
+    }
+
+    /** Toutes les permissions runtime nécessaires sont-elles accordées ? */
+    fun allGranted(context: Context): Boolean = required().all {
+        ContextCompat.checkSelfPermission(context, it.permission) == PackageManager.PERMISSION_GRANTED
     }
 }

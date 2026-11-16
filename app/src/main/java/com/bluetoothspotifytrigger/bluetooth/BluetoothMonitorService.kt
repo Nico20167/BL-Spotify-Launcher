@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.data.TriggerRepository
+import com.bluetoothspotifytrigger.data.local.AppPrefs
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import com.bluetoothspotifytrigger.debug.DebugActions
 import com.bluetoothspotifytrigger.spotify.SpotifyController
@@ -214,14 +215,18 @@ class BluetoothMonitorService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val ALERT_NOTIFICATION_ID = 2
 
+        /** Démarre le service et mémorise le choix (relance auto au boot / après MAJ). */
         fun start(context: Context) {
+            AppPrefs(context).serviceEnabled = true
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, BluetoothMonitorService::class.java),
             )
         }
 
+        /** Arrête le service ; il ne sera plus relancé automatiquement. */
         fun stop(context: Context) {
+            AppPrefs(context).serviceEnabled = false
             context.stopService(Intent(context, BluetoothMonitorService::class.java))
         }
     }

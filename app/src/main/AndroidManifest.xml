@@ -17,6 +17,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+    <!-- Relance du service après redémarrage du téléphone. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Demande directe d'exemption d'optimisation batterie (sinon certains OEM
+         tuent le service). Usage personnel : OK ; une publication Play Store
+         exigerait de justifier cette permission. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
@@ -36,6 +44,17 @@
             android:name=".bluetooth.BluetoothMonitorService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- BOOT_COMPLETED / MY_PACKAGE_REPLACED sont des broadcasts protégés
+             (émis par le système uniquement) : exported="true" sans risque. -->
+        <receiver
+            android:name=".bluetooth.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

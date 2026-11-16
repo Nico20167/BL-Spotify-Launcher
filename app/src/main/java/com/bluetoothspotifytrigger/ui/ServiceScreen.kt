@@ -1,8 +1,15 @@
 package com.bluetoothspotifytrigger.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,6 +57,7 @@ fun ServiceScreen(modifier: Modifier = Modifier) {
             PackageManager.PERMISSION_GRANTED
     }
     val canStart = btOk && notifOk
+    val batteryExempt = remember(refreshKey) { isIgnoringBatteryOptimizations(context) }
 
     Column(
         modifier = modifier
@@ -103,11 +112,58 @@ fun ServiceScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        // Optimisation batterie : sur beaucoup de téléphones (Samsung, Xiaomi…),
+        // le système finit par tuer le service malgré la notification si l'app
+        // n'est pas exemptée.
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Optimisation batterie", style = MaterialTheme.typography.titleMedium)
+                if (batteryExempt) {
+                    Text(
+                        "L'app est exemptée ✅ : le service ne sera pas mis en veille.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    Text(
+                        "Recommandé : sans exemption, certains téléphones arrêtent le " +
+                            "service en arrière-plan et la musique ne se lance plus.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedButton(
+                        onClick = { requestBatteryExemption(context) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Désactiver l'optimisation batterie")
+                    }
+                }
+            }
+        }
+
         Text(
             text = "Une fois le service actif, une notification persistante apparaît. " +
-                "Connecte un appareil Bluetooth appairé et observe logcat :\n" +
-                "adb logcat -s BluetoothMonitor BtConnectionReceiver",
+                "Il redémarre automatiquement après un redémarrage du téléphone.",
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+private fun isIgnoringBatteryOptimizations(context: Context): Boolean =
+    context.getSystemService(PowerManager::class.java)
+        .isIgnoringBatteryOptimizations(context.packageName)
+
+@SuppressLint("BatteryLife") // Usage personnel assumé (voir manifest).
+private fun requestBatteryExemption(context: Context) {
+    val direct = Intent(
+        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        Uri.parse("package:${context.packageName}"),
+    )
+    try {
+        context.startActivity(direct)
+    } catch (e: ActivityNotFoundException) {
+        // Certains OEM n'implémentent pas le dialogue direct : liste générale.
+        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }
 }
