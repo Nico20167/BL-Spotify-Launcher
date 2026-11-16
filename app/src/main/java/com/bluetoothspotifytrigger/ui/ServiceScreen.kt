@@ -32,18 +32,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.RadioButton
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.semantics.Role
 import com.bluetoothspotifytrigger.bluetooth.BluetoothMonitorService
 import com.bluetoothspotifytrigger.bluetooth.ServiceState
-import com.bluetoothspotifytrigger.data.local.AppPrefs
-import com.bluetoothspotifytrigger.spotify.PlaybackMode
 import com.bluetoothspotifytrigger.spotify.SpotifyIntentPlayer
 
 @Composable
@@ -70,8 +62,6 @@ fun ServiceScreen(modifier: Modifier = Modifier) {
     val canStart = btOk && notifOk
     val batteryExempt = remember(refreshKey) { isIgnoringBatteryOptimizations(context) }
     val overlayOk = remember(refreshKey) { SpotifyIntentPlayer.canStartFromBackground(context) }
-    val prefs = remember { AppPrefs(context) }
-    var playbackMode by remember { mutableStateOf(prefs.playbackMode) }
 
     Column(
         modifier = modifier
@@ -127,53 +117,31 @@ fun ServiceScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Choix du moteur de lecture (SDK ou prototype sans SDK).
+        // Ouverture de Spotify depuis l'arrière-plan : Android 10+ l'interdit sauf
+        // exemption ; on utilise « Afficher par-dessus les autres apps ».
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Mode de lecture", style = MaterialTheme.typography.titleMedium)
-                PlaybackMode.entries.forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = playbackMode == mode,
-                                onClick = {
-                                    prefs.playbackMode = mode
-                                    playbackMode = mode
-                                },
-                                role = Role.RadioButton,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
+                Text("Lancement de Spotify", style = MaterialTheme.typography.titleMedium)
+                if (overlayOk) {
+                    Text(
+                        "Ouverture de Spotify en arrière-plan autorisée ✅",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    Text(
+                        "Requis : autorise « Afficher par-dessus les autres apps », sinon " +
+                            "Android bloque l'ouverture de Spotify quand l'app est fermée.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(
+                        onClick = { openOverlaySettings(context) },
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        RadioButton(selected = playbackMode == mode, onClick = null)
-                        Column(modifier = Modifier.padding(start = 8.dp)) {
-                            Text(mode.label, style = MaterialTheme.typography.bodyMedium)
-                            Text(mode.description, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                if (playbackMode == PlaybackMode.INTENT) {
-                    if (overlayOk) {
-                        Text(
-                            "Ouverture de Spotify en arrière-plan autorisée ✅",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    } else {
-                        Text(
-                            "Requis : autorise « Afficher par-dessus les autres apps », sinon " +
-                                "Android bloque l'ouverture de Spotify quand l'app est fermée.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        OutlinedButton(
-                            onClick = { openOverlaySettings(context) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Autoriser l'affichage par-dessus")
-                        }
+                        Text("Autoriser l'affichage par-dessus")
                     }
                 }
             }

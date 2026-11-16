@@ -27,14 +27,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -44,10 +48,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.data.local.AppPrefs
-import com.bluetoothspotifytrigger.spotify.PlaybackMode
 import com.bluetoothspotifytrigger.spotify.SpotifyLink
+import kotlin.math.roundToInt
 
 @Composable
 fun DeviceListScreen(
@@ -102,17 +105,6 @@ fun DeviceListScreen(
             text = "Appareils appairés",
             style = MaterialTheme.typography.headlineSmall,
         )
-
-        if (BuildConfig.SPOTIFY_CLIENT_ID.isBlank() &&
-            AppPrefs(context).playbackMode == PlaybackMode.SDK
-        ) {
-            Text(
-                "Client ID Spotify non configuré : la lecture ne fonctionnera pas " +
-                    "(renseigner SPOTIFY_CLIENT_ID dans local.properties puis rebuild).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
 
         testMessage?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
@@ -188,7 +180,7 @@ fun DeviceListScreen(
                             DeviceCard(
                                 device = device,
                                 onEdit = { editing = device },
-                                onTest = { uri -> viewModel.testPlay(device.name, uri) },
+                                onTest = { viewModel.testPlay(device) },
                             )
                         }
                     }
@@ -207,12 +199,12 @@ fun DeviceListScreen(
         UriEditDialog(
             device = device,
             onDismiss = { editing = null },
-            onSave = { uri ->
-                viewModel.setUri(device.address, uri)
+            onSave = { uri, volume ->
+                viewModel.setConfig(device.address, uri, volume)
                 editing = null
             },
             onClear = {
-                viewModel.clearUri(device.address)
+                viewModel.clear(device.address)
                 editing = null
             },
         )
@@ -246,7 +238,7 @@ private fun BluetoothPermissionNeeded(
 }
 
 @Composable
-private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: (String) -> Unit) {
+private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = device.name, style = MaterialTheme.typography.titleMedium)
@@ -261,13 +253,20 @@ private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: (String) ->
                     MaterialTheme.colorScheme.primary
                 },
             )
+            if (device.spotifyUri != null) {
+                Text(
+                    text = device.volumePercent?.let { "Volume au démarrage : $it %" }
+                        ?: "Volume : inchangé",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onEdit) {
-                    Text(if (device.spotifyUri == null) "Associer un URI" else "Modifier l'URI")
+                    Text(if (device.spotifyUri == null) "Associer une playlist" else "Modifier")
                 }
-                device.spotifyUri?.let { uri ->
-                    TextButton(onClick = { onTest(uri) }) { Text("Tester") }
+                if (device.spotifyUri != null) {
+                    TextButton(onClick = onTest) { Text("Tester") }
                 }
             }
         }
@@ -278,10 +277,13 @@ private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: (String) ->
 private fun UriEditDialog(
     device: DeviceUi,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (uri: String, volumePercent: Int?) -> Unit,
     onClear: () -> Unit,
 ) {
     var text by remember { mutableStateOf(device.spotifyUri ?: "") }
+    // Volume au démarrage : désactivé = on ne touche pas au volume.
+    var volumeEnabled by remember { mutableStateOf(device.volumePercent != null) }
+    var volume by remember { mutableFloatStateOf((device.volumePercent ?: 50).toFloat()) }
     // Accepte un URI spotify:… ou un lien de partage open.spotify.com, converti en URI.
     val parsed = SpotifyLink.parse(text)
     val showError = text.isNotBlank() && parsed is SpotifyLink.Result.Invalid
@@ -310,11 +312,36 @@ private fun UriEditDialog(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Régler le volume au démarrage",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = volumeEnabled, onCheckedChange = { volumeEnabled = it })
+                }
+                if (volumeEnabled) {
+                    Text("${volume.roundToInt()} %", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = volume,
+                        onValueChange = { volume = it },
+                        valueRange = 0f..100f,
+                        steps = 19, // pas de 5 %
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { (parsed as? SpotifyLink.Result.Valid)?.let { onSave(it.uri) } },
+                onClick = {
+                    (parsed as? SpotifyLink.Result.Valid)?.let {
+                        onSave(it.uri, if (volumeEnabled) volume.roundToInt() else null)
+                    }
+                },
                 enabled = parsed is SpotifyLink.Result.Valid,
             ) {
                 Text("Enregistrer")

@@ -11,8 +11,9 @@ import androidx.lifecycle.viewModelScope
 import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.bluetooth.PairedDevice
 import com.bluetoothspotifytrigger.debug.DebugActions
-import com.bluetoothspotifytrigger.spotify.SpotifyController
-import com.bluetoothspotifytrigger.spotify.SpotifyPlayer
+import com.bluetoothspotifytrigger.spotify.describe
+import com.bluetoothspotifytrigger.spotify.SpotifyIntentPlayer
+import com.bluetoothspotifytrigger.data.DeviceConfig
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,11 +23,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Appareil appairé + l'URI Spotify qu'on lui a associé (ou null). */
+/** Appareil appairé + ses réglages (URI Spotify, volume au démarrage), null si absents. */
 data class DeviceUi(
     val name: String,
     val address: String,
     val spotifyUri: String?,
+    val volumePercent: Int? = null,
 )
 
 sealed interface DeviceListUiState {
@@ -51,9 +53,9 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
     val state: StateFlow<DeviceListUiState> =
         combine(
             bluetoothRead,
-            repository.associations,
+            repository.configs,
             repository.fakeDevicesEnabled,
-        ) { bt, associations, fakeEnabled ->
+        ) { bt, configs, fakeEnabled ->
             // Debug : ajoute les appareils fictifs aux vrais appareils appairés.
             val fakes = if (BuildConfig.DEBUG && fakeEnabled) DebugActions.FAKE_DEVICES else emptyList()
             when (bt) {
@@ -66,7 +68,8 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
                         DeviceUi(
                             name = device.name,
                             address = device.address,
-                            spotifyUri = associations[device.address],
+                            spotifyUri = configs[device.address]?.uri,
+                            volumePercent = configs[device.address]?.volumePercent,
                         )
                     },
                 )
@@ -97,21 +100,18 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private val player = SpotifyPlayer(application)
+    private val player = SpotifyIntentPlayer(application)
 
-    /** Résultat du dernier test de lecture (null = aucun / en cours masqué). */
+    /** Résultat du dernier test de lecture (null = aucun test lancé). */
     private val _testMessage = MutableStateFlow<String?>(null)
     val testMessage: StateFlow<String?> = _testMessage
 
-    /**
-     * Test manuel depuis l'UI. Premier plan → on autorise l'écran
-     * d'autorisation Spotify : c'est ici que l'utilisateur donne son accord une
-     * fois pour toutes, ce qui permet ensuite les lancements en arrière-plan.
-     */
-    fun testPlay(deviceName: String, uri: String) = viewModelScope.launch {
-        _testMessage.value = "$deviceName : connexion à Spotify…"
-        val result = player.play(uri, foreground = true)
-        _testMessage.value = "$deviceName : ${SpotifyController.describe(result)}"
+    /** Test manuel depuis l'UI : même lecture (URI + volume) qu'au déclenchement. */
+    fun testPlay(device: DeviceUi) = viewModelScope.launch {
+        val uri = device.spotifyUri ?: return@launch
+        _testMessage.value = "${device.name} : ouverture de Spotify…"
+        val result = player.play(uri, device.volumePercent)
+        _testMessage.value = "${device.name} : ${result.describe()}"
     }
 
     /**
@@ -125,12 +125,12 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
         return alias ?: name ?: "(sans nom)"
     }
 
-    fun setUri(macAddress: String, uri: String) = viewModelScope.launch {
-        repository.setUri(macAddress, uri)
+    fun setConfig(macAddress: String, uri: String, volumePercent: Int?) = viewModelScope.launch {
+        repository.setConfig(macAddress, DeviceConfig(uri, volumePercent))
     }
 
-    fun clearUri(macAddress: String) = viewModelScope.launch {
-        repository.clearUri(macAddress)
+    fun clear(macAddress: String) = viewModelScope.launch {
+        repository.clear(macAddress)
     }
 
     private sealed interface BluetoothRead {

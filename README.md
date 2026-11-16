@@ -1,118 +1,114 @@
 # BluetoothSpotifyTrigger
 
-Application Android qui déclenche automatiquement la lecture d'un contenu Spotify dès que le téléphone se connecte à un appareil Bluetooth configuré.
+Application Android qui lance automatiquement une playlist Spotify dès que le
+téléphone se connecte à un appareil Bluetooth choisi (autoradio, enceinte,
+casque), avec un volume de départ réglable par appareil.
 
-Voir [`CLAUDE.md`](./CLAUDE.md) pour la spécification fonctionnelle et technique complète.
+> Je monte en voiture → le téléphone se connecte à l'autoradio → ma playlist
+> démarre toute seule, au bon volume.
 
----
+Aucun compte développeur Spotify n'est nécessaire : l'app pilote l'application
+Spotify officielle installée sur le téléphone.
 
-## Prérequis
-
-### Sur l'hôte
-- Un **téléphone Android physique** (indispensable : ni l'émulateur ni le container ne simulent une vraie connexion Bluetooth + l'app Spotify native).
-- L'app **Spotify officielle** installée sur le téléphone, avec un compte connecté.
-- `adb` accessible depuis l'hôte pour installer/tester l'APK.
-- Débogage USB activé sur le téléphone.
-
-### Compte Spotify Developer
-- Une app créée sur le [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-- **Client ID** récupéré.
-- **Redirect URI** déclaré : `bluetoothspotifytrigger://auth`.
-- Le **package name** et l'**empreinte SHA-1** du keystore de debug ajoutés dans les paramètres de l'app Spotify (requis par l'App Remote SDK).
+Spécification et choix techniques : [`CLAUDE.md`](./CLAUDE.md).
 
 ---
 
-## Configuration des secrets
+## Installer l'app sur un téléphone
 
-Ne **jamais** committer ces valeurs. Renseigner dans `local.properties` (déjà gitignoré par défaut) :
+1. Récupérer `app-release.apk` (voir « Construire » ci-dessous, ou le fichier
+   partagé).
+2. Sur le téléphone, ouvrir le fichier. Android demande d'autoriser
+   l'installation d'applications inconnues pour l'app utilisée (Fichiers,
+   Drive, WhatsApp…) : accepter. Google Play Protect peut afficher un
+   avertissement « app inconnue » : choisir « Installer quand même ».
+3. Ouvrir **BT Spotify Trigger** :
+   - onglet **Permissions** → « Demander les permissions » (Bluetooth,
+     notifications) ;
+   - onglet **Service** → « Autoriser l'affichage par-dessus » (indispensable :
+     c'est ce qui permet d'ouvrir Spotify téléphone verrouillé),
+     « Désactiver l'optimisation batterie », puis « Démarrer le service » ;
+   - onglet **Appareils** → sur l'appareil voulu, « Associer une playlist » :
+     coller le lien Spotify (dans Spotify : Partager → Copier le lien), régler
+     le volume de départ si souhaité, puis « Tester ».
+4. C'est tout : le service tourne en arrière-plan (notification persistante) et
+   redémarre seul après un redémarrage du téléphone.
 
-```properties
-sdk.dir=/opt/android-sdk
-SPOTIFY_CLIENT_ID=ton_client_id_ici
-SPOTIFY_REDIRECT_URI=bluetoothspotifytrigger://auth
-```
+Prérequis : Android 8.0+, application Spotify installée et connectée.
 
-Le build expose ces valeurs via `BuildConfig` (configuré dans `build.gradle`).
+### Limites connues
 
----
-
-## Environnement Docker
-
-Le container sert à **écrire et compiler** le code (Claude Code y tourne). Le **test se fait sur device physique depuis l'hôte**.
-
-### Toolchain nécessaire dans le container
-- JDK **17**
-- Android SDK (command-line tools) + `platforms;android-34` + `build-tools;34.0.0`
-- Licences SDK acceptées : `yes | sdkmanager --licenses`
-
-### Exemple de `Dockerfile`
-```dockerfile
-FROM eclipse-temurin:17-jdk
-
-ENV ANDROID_SDK_ROOT=/opt/android-sdk
-ENV PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
-
-RUN apt-get update && apt-get install -y wget unzip git && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p $ANDROID_SDK_ROOT/cmdline-tools && \
-    cd $ANDROID_SDK_ROOT/cmdline-tools && \
-    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O tools.zip && \
-    unzip -q tools.zip && mv cmdline-tools latest && rm tools.zip
-
-RUN yes | sdkmanager --licenses && \
-    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-
-WORKDIR /workspace
-```
-
-> Vérifier les numéros de version au démarrage (build-tools, plateforme, lien des cmdline-tools) — ils évoluent.
-
-### Limite à connaître
-Le build se fait dans le container, mais **l'installation et le test se font depuis l'hôte** (l'accès USB/adb depuis un container est fragile). Workflow : le container produit l'APK → tu l'installes depuis l'hôte.
+- **Délai** : ~5 à 10 s entre la connexion Bluetooth et la musique (Spotify doit
+  démarrer), un peu plus téléphone verrouillé.
+- **Spotify gratuit** : Spotify peut imposer la lecture aléatoire de la
+  playlist au lieu de l'ordre exact.
+- **Mécanisme non officiel** : l'app utilise un comportement de Spotify
+  (`spotify:…:play`) non documenté. Une future version de Spotify pourrait le
+  modifier.
+- **Constructeurs agressifs** (Samsung, Xiaomi, Huawei…) : en plus de
+  l'exemption batterie, il peut falloir autoriser le « démarrage automatique »
+  ou désactiver la « mise en veille des apps » dans les réglages du fabricant.
 
 ---
 
-## Commandes de build (CLI)
+## Construire
 
-Depuis la racine du projet :
+Environnement : JDK 17+ (testé avec Temurin 21), Android SDK (platform 35,
+build-tools 35.0.0). Développement natif (pas de container : l'accès USB au
+téléphone n'y est pas fiable).
 
 ```bash
-# Compiler l'APK debug
-./gradlew assembleDebug
-
-# Installer directement sur un device branché (depuis l'hôte, pas le container)
-./gradlew installDebug
-
-# Ou installer un APK produit dans le container, depuis l'hôte :
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-# Logs filtrés pour suivre le service et le déclenchement
-adb logcat | grep -E "BluetoothMonitor|SpotifyController|BtConnection"
-
-# Récupérer l'empreinte SHA-1 du keystore de debug (pour le dashboard Spotify)
-keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey \
-  -storepass android -keypass android | grep SHA1
+./gradlew testDebugUnitTest   # tests unitaires JVM
+./gradlew assembleDebug       # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
+./gradlew installDebug        # installe sur le téléphone branché (adb)
 ```
 
+### Signature
+
+La version release est signée avec la clé décrite dans `keystore.properties`
+(racine du projet, **jamais commité**) :
+
+```properties
+storeFile=C:/chemin/vers/bluetoothspotifytrigger-release.jks
+storePassword=…
+keyAlias=bst
+keyPassword=…
+```
+
+⚠️ Sauvegarder le `.jks` et ses mots de passe : sans eux, impossible de publier
+une mise à jour installable par-dessus (il faudrait désinstaller l'app et
+perdre les réglages). Sans `keystore.properties`, le build utilise la clé de
+debug Android par défaut.
+
+### Pièges d'environnement (Windows)
+
+- Antivirus avec analyse HTTPS (ex. Avast) : Gradle échoue en `PKIX path
+  building failed`. Ajouter `-Djavax.net.ssl.trustStoreType=Windows-ROOT` à
+  `org.gradle.jvmargs` (déjà fait) et à `JAVA_OPTS` pour le wrapper. Casse aussi
+  le Play Store de l'émulateur.
+
 ---
 
-## Workflow de développement
+## Tester sans matériel (build debug)
 
-1. Build dans le container : `./gradlew assembleDebug`.
-2. APK récupéré côté hôte, installé via `adb install -r`.
-3. Test manuel sur le téléphone (appairer/connecter l'appareil BT cible).
-4. Lecture des logs via `adb logcat`.
+Le build debug accepte des commandes `adb` (réservées à adb via la permission
+`DUMP`) qui simulent les événements Bluetooth et passent par exactement le
+même code que les vrais :
 
-Voir [`CLAUDE.md`](./CLAUDE.md) → section "Étapes de réalisation" pour l'ordre d'implémentation. **Chaque étape doit compiler et être testable avant de passer à la suivante.**
+```bash
+# Ajouter deux appareils fictifs à la liste
+adb shell am broadcast -p com.bluetoothspotifytrigger \
+  -a com.bluetoothspotifytrigger.debug.SET_FAKE_DEVICES --ez enabled true
 
----
+# Simuler la connexion d'un appareil (lien radio, puis audio A2DP)
+adb shell am broadcast -p com.bluetoothspotifytrigger \
+  -a com.bluetoothspotifytrigger.debug.SIMULATE_ACL_CONNECTED \
+  --es address 02:00:00:00:00:01 --es name "'Autoradio (simulé)'"
+adb shell am broadcast -p com.bluetoothspotifytrigger \
+  -a com.bluetoothspotifytrigger.debug.SIMULATE_A2DP_CONNECTED \
+  --es address 02:00:00:00:00:01 --es name "'Autoradio (simulé)'"
 
-## Test du déclencheur sans bouger
-
-Pour tester le `ACL_CONNECTED` sans avoir à débrancher/rebrancher physiquement l'appareil à chaque fois : depuis les paramètres Bluetooth du téléphone, déconnecter puis reconnecter l'appareil appairé suffit à émettre l'event. Garder `adb logcat` ouvert en parallèle.
-
----
-
-## Statut
-
-V1 en cours. Scope défini dans `CLAUDE.md`.
+# Suivre le déroulé
+adb logcat -s BtConnectionReceiver ConnectionCoordinator TriggerHandler SpotifyIntentPlayer
+```

@@ -12,3 +12,8 @@ local.properties
 
 # Kotlin compiler caches
 .kotlin/
+
+# Clé de signature (mots de passe) — ne JAMAIS committer
+keystore.properties
+*.jks
+*.keystore

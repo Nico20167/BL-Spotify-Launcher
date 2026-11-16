@@ -2,144 +2,96 @@
 
 ## Objectif
 
-Application Android qui, **dès qu'un téléphone se connecte à un appareil Bluetooth donné** (ex. autoradio, casque, enceinte), **déclenche automatiquement la lecture d'un contenu Spotify** configurable par l'utilisateur (playlist, album, titre).
+Application Android qui, **dès qu'un téléphone se connecte à un appareil Bluetooth donné** (autoradio, casque, enceinte), **lance automatiquement la lecture d'un contenu Spotify** choisi par l'utilisateur (playlist, album, titre…), **au volume configuré** pour cet appareil.
 
-Cas d'usage type : je monte en voiture → mon téléphone s'appaire à l'autoradio → ma playlist conduite démarre seule.
+Cas d'usage type : je monte en voiture → mon téléphone se connecte à l'autoradio → ma playlist conduite démarre seule.
+
+Doit pouvoir être **partagée à des amis** (APK) sans qu'ils aient besoin d'un compte développeur Spotify.
 
 ---
 
 ## Contraintes & contexte
 
-- **Plateforme** : Android natif, Kotlin.
-- **Min SDK** : 26 (Android 8.0). **Target SDK** : 34+.
-- **UI** : Jetpack Compose. L'UI sert uniquement à la configuration ; le cœur fonctionnel est un service en arrière-plan.
-- **Architecture** : MVVM.
-- **Pas de backend serveur** : tout est local sur le téléphone.
-- **Développement** : projet piloté par Claude Code dans un container Docker. Le développeur est ingénieur mécatronique (à l'aise avec l'embarqué, le hardware, la logique système ; moins familier des spécificités du framework Android — sois explicite sur les pièges Android).
+- **Plateforme** : Android natif, Kotlin. **Min SDK** 26, **target/compile SDK** 35.
+- **UI** : Jetpack Compose, uniquement pour la configuration ; le cœur est un foreground service.
+- **Architecture** : MVVM légère, pas de DI. **Pas de backend** : tout est local.
+- **Développement** : natif sur Windows (pas de container : l'USB/adb n'y passe pas de façon fiable). Le développeur est ingénieur mécatronique (à l'aise avec l'embarqué et la logique système, moins avec les spécificités Android — être explicite sur les pièges Android).
+- **Tests** : tests unitaires JVM pour la logique pure ; tests fonctionnels pilotés via adb (émulateur ou téléphone réel). Sur le téléphone personnel du développeur : **toujours vérifier que l'app visée est au premier plan avant toute action d'UI adb**.
 
 ---
 
-## Fonctionnalités (scope V1)
+## Choix techniques
 
-1. Lister les appareils Bluetooth **appairés** (bonded devices).
-2. Pour chaque appareil, permettre d'associer un **URI Spotify** (`spotify:playlist:...`, `spotify:album:...`, `spotify:track:...`).
-3. Persister ces associations `adresse MAC → URI Spotify`.
-4. Un service en arrière-plan détecte la **connexion** d'un appareil Bluetooth (`ACTION_ACL_CONNECTED`).
-5. Si l'appareil connecté correspond à une association enregistrée → **lancer la lecture Spotify** de l'URI associé.
-6. Gérer proprement les permissions runtime et la survie du service en arrière-plan.
-
-### Hors scope V1 (à noter pour plus tard, ne pas implémenter)
-- Déclenchement sur déconnexion (pause auto).
-- Délai/conditions (heure, jour).
-- Multi-URI aléatoire par appareil.
-
----
-
-## Choix techniques imposés
-
-### Contrôle de Spotify : Spotify App Remote SDK
-- Utiliser le **Spotify App Remote SDK** (`spotify-app-remote`), **pas** la Web API REST.
-- Raison : on veut piloter l'app Spotify native déjà installée (`play(uri)`, pause, skip) sans gérer un flux OAuth complet ni refresh tokens côté lecture.
-- Le développeur a déjà créé une app sur le Spotify Developer Dashboard et récupéré le **Client ID**. Prévoir un emplacement clair pour le configurer (ex. `local.properties` ou `BuildConfig`, **jamais commité en dur**).
-- Le **redirect URI** déclaré sur le dashboard doit correspondre à celui du code (ex. `bluetoothspotifytrigger://auth`).
-- L'authentification App Remote nécessite l'app Spotify officielle installée et un utilisateur connecté. Gérer le cas où elle est absente (message clair).
+### Lancement de Spotify : intent `:play` (sans SDK)
+- Intent `ACTION_VIEW` sur `spotify:<type>:<id>:play`, package `com.spotify.music`. Comportement **non documenté** de Spotify, validé sur Pixel 9 Pro XL / Android 17 / Spotify 9.2.
+- **Pourquoi pas le Spotify App Remote SDK** (abandonné, voir historique git) : exige un Client ID, un compte Premium pour le développeur, et limite l'app à 5 utilisateurs déclarés (mode Développement, règles de février 2026) ; le mode étendu est réservé aux entreprises. Incompatible avec le partage à des amis.
+- **Ouverture depuis l'arrière-plan** (Android 10+ l'interdit) : exemption via la permission spéciale « Afficher par-dessus les autres apps » (`SYSTEM_ALERT_WINDOW`, accordée par l'utilisateur).
+- **Spotify ignore parfois `:play`** (contenu déjà en mémoire) et, téléphone verrouillé, ne peut pas démarrer son service de lecture seul : l'app envoie alors la touche média `PLAY` (qui accorde à Spotify une autorisation temporaire de démarrer) toutes les 3 s jusqu'à ce qu'un son soit détecté (`AudioManager.isMusicActive`).
+- **Volume** : `STREAM_MUSIC` réglé avant le lancement puis réappliqué après confirmation (Android peut restaurer le volume mémorisé de l'appareil à la connexion).
 
 ### Détection Bluetooth
-- `BroadcastReceiver` sur `BluetoothDevice.ACTION_ACL_CONNECTED`.
-- **Enregistrement dynamique** du receiver dans un **foreground service**, PAS dans le manifest (les broadcasts Bluetooth ne sont plus délivrés de façon fiable via manifest depuis API 26+).
-- Récupérer le `BluetoothDevice` depuis l'intent, extraire l'**adresse MAC** pour filtrer.
-- Implémenter un **débounce** : les events ACL peuvent arriver en double.
+- Receiver **enregistré dynamiquement** dans un **foreground service** (`connectedDevice`) : `ACTION_ACL_CONNECTED` + A2DP `CONNECTION_STATE_CHANGED`.
+- **Attente de l'A2DP** : l'ACL arrive avant que l'audio soit prêt ; on déclenche à la connexion A2DP, ou 8 s après l'ACL si l'A2DP ne vient pas. **Cooldown 60 s** par appareil (doublons, micro-coupures).
+- Appareils affichés sous leur **alias** (nom donné par l'utilisateur dans Android).
+
+### Persistance
+- DataStore : par adresse MAC, URI Spotify + volume optionnel.
+- SharedPreferences (lecture synchrone) : service activé (relance au boot), permissions déjà demandées.
 
 ---
 
-## Architecture cible
+## Architecture
 
 ```
-app/
-├── di/                          # (optionnel) Hilt si tu en mets
-├── data/
-│   ├── TriggerRepository.kt     # CRUD des associations MAC -> URI
-│   └── local/                   # DataStore (ou Room si multi-trigger évolué)
+app/src/main/java/com/bluetoothspotifytrigger/
 ├── bluetooth/
-│   ├── BluetoothMonitorService.kt   # Foreground service, host du receiver
-│   └── BtConnectionReceiver.kt      # BroadcastReceiver ACL_CONNECTED
+│   ├── BluetoothMonitorService.kt   # Foreground service, héberge les receivers
+│   ├── BtConnectionReceiver.kt      # Events bruts ACL / A2DP (+ simulations debug)
+│   ├── ConnectionCoordinator.kt     # Quand déclencher (attente A2DP, cooldown)
+│   └── BootReceiver.kt              # Relance après reboot / mise à jour
+├── trigger/TriggerHandler.kt        # Appareil connecté → réglages → lecture
 ├── spotify/
-│   └── SpotifyController.kt      # Wrapper SpotifyAppRemote (connect, play)
-├── ui/
-│   ├── MainActivity.kt
-│   ├── DeviceListScreen.kt      # Liste appareils appairés + sélection URI
-│   └── *ViewModel.kt
-└── MainApplication.kt
+│   ├── SpotifyIntentPlayer.kt       # Intent :play + touche média + volume
+│   ├── SpotifyLink.kt               # Lien de partage / URI → URI canonique
+│   └── PlayResult.kt
+├── data/                            # TriggerRepository (DataStore), AppPrefs
+├── debug/DebugActions.kt            # Commandes adb de simulation (debug only)
+└── ui/                              # Onglets Permissions / Appareils / Service
+app/src/debug/                       # Receiver de commandes adb (build debug uniquement)
 ```
 
-**Flux runtime** :
-`BluetoothMonitorService` (foreground, notification persistante) enregistre `BtConnectionReceiver` → à la connexion d'un device, le receiver interroge `TriggerRepository` → si match, appelle `SpotifyController.connectAndPlay(uri)`.
+**Flux runtime** : `BtConnectionReceiver` → `ConnectionCoordinator` → `TriggerHandler` → `SpotifyIntentPlayer` ; le service met à jour sa notification et alerte en cas d'échec.
 
 ---
 
-## Permissions (point sensible — sois rigoureux)
+## Permissions
 
 | Permission | Quand | Note |
 |---|---|---|
-| `BLUETOOTH_CONNECT` | Runtime, **API 31+** | Indispensable pour lire les bonded devices et les events |
-| `BLUETOOTH` / `BLUETOOTH_ADMIN` | Manifest, **≤ API 30** | Legacy |
-| `POST_NOTIFICATIONS` | Runtime, **API 33+** | Requis pour la notif du foreground service |
-| `FOREGROUND_SERVICE` | Manifest | |
-| `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Manifest, **API 34+** | Type de FGS approprié |
-
-- Gérer le **flow de demande runtime** proprement (cas refusé, "ne plus demander").
-- Le foreground service doit déclarer un `foregroundServiceType` cohérent (`connectedDevice`).
-
----
-
-## Pièges Android à anticiper (important)
-
-1. **Survie du service** : Android tue agressivement les services en arrière-plan. Foreground service + notification persistante = la seule voie fiable. Tester en mode **Doze** et après redémarrage.
-2. **Relance au boot** : prévoir (optionnel V1) un receiver `BOOT_COMPLETED` pour relancer le service, avec la permission `RECEIVE_BOOT_COMPLETED`.
-3. **Manifest vs dynamic receiver** : ne PAS tenter d'écouter `ACL_CONNECTED` via le manifest. Enregistrement dynamique only.
-4. **Restrictions constructeurs** (Xiaomi, Samsung, etc.) : certains OEM tuent les services malgré tout — documenter dans le README que l'utilisateur devra peut-être exempter l'app de l'optimisation batterie.
-5. **Débounce des events ACL** pour éviter de relancer la musique plusieurs fois.
-6. **SpotifyAppRemote.connect** est async : gérer le callback de connexion avant d'appeler `play()`, et déconnecter proprement après usage pour ne pas fuiter.
+| `BLUETOOTH_CONNECT` | Runtime, API 31+ | Appareils appairés, events |
+| `BLUETOOTH` / `BLUETOOTH_ADMIN` | Manifest, ≤ API 30 | Legacy |
+| `POST_NOTIFICATIONS` | Runtime, API 33+ | Notification du service |
+| `FOREGROUND_SERVICE(_CONNECTED_DEVICE)` | Manifest | Type FGS |
+| `RECEIVE_BOOT_COMPLETED` | Manifest | Relance au boot |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Manifest | Demande d'exemption batterie (à justifier si publication Play Store) |
+| `SYSTEM_ALERT_WINDOW` | Réglage spécial | Ouvrir Spotify depuis l'arrière-plan |
 
 ---
 
-## Étapes de réalisation (ordre suggéré)
+## Critères de « fait » (V1)
 
-1. **Bootstrap** : projet Compose vide qui build et s'installe (`./gradlew installDebug`). Vérifier l'environnement Docker/CLI.
-2. **Permissions** : écran qui demande et affiche l'état des permissions BT + notifications.
-3. **Liste des appareils appairés** affichée dans l'UI.
-4. **Persistance** des associations MAC → URI (DataStore).
-5. **Foreground service** + receiver dynamique qui **log** simplement la connexion (sans Spotify encore).
-6. **Intégration Spotify App Remote** : `connectAndPlay(uri)` testé manuellement via un bouton.
-7. **Câblage final** : la connexion BT déclenche le play du bon URI.
-8. **Robustesse** : débounce, gestion app Spotify absente, test Doze.
+- [x] Build et installation via Gradle CLI ; APK release signé.
+- [x] Permissions demandées et gérées (refus et refus définitif inclus, persistants).
+- [x] Appareils appairés listés (alias) ; association lien/URI Spotify + volume.
+- [x] Réglages persistants (redémarrage de l'app, mise à jour).
+- [x] Foreground service avec notification ; relance après reboot et mise à jour.
+- [x] Connexion réelle de l'appareil → bon contenu lancé, téléphone verrouillé (validé : JBL, Pixel 9 Pro XL).
+- [x] Spotify absent / lecture non confirmée → notification d'alerte explicite.
+- [ ] Volume au démarrage validé sur téléphone réel.
+- [ ] Validé sur un second téléphone (autre marque / version d'Android).
+- [ ] Validé en voiture (autoradio).
 
-> Avance étape par étape. À chaque étape, l'app doit compiler et être testable. Ne pas tout coder d'un bloc.
-
----
-
-## Critères de "fait" (V1)
-
-- [ ] L'app build et s'installe via Gradle CLI.
-- [ ] Les permissions sont demandées et gérées (refus inclus).
-- [ ] Les appareils appairés s'affichent et on peut leur associer un URI Spotify.
-- [ ] Les associations survivent au redémarrage de l'app.
-- [ ] Le foreground service tourne avec notification persistante.
-- [ ] Connecter l'appareil BT configuré lance le bon contenu Spotify.
-- [ ] Comportement correct si l'app Spotify est absente ou l'utilisateur non connecté.
-
----
-
-## Infos à fournir par le développeur (placeholders)
-
-- `SPOTIFY_CLIENT_ID` = `<à renseigner dans local.properties>`
-- `SPOTIFY_REDIRECT_URI` = `bluetoothspotifytrigger://auth` (à déclarer aussi sur le dashboard Spotify)
-- Adresse(s) MAC de l'appareil cible : récupérées dynamiquement via l'UI, rien à coder en dur.
-
----
-
-## Documentation de référence à consulter
-
-- Spotify App Remote SDK (Android) — guide d'auth et `playerApi.play(uri)`.
-- Android : foreground services, types de FGS (API 34), permissions Bluetooth runtime (API 31+).
-- Vérifier les versions à jour du SDK Spotify et des dépendances Gradle au démarrage (peuvent avoir changé).
+### Hors scope V1
+- Pause automatique à la déconnexion.
+- Conditions (heure, jour), multi-URI aléatoire.
+- Remplacer `SYSTEM_ALERT_WINDOW` par une association CompanionDeviceManager (plus explicite pour l'utilisateur).

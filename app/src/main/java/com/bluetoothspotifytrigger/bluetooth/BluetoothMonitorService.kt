@@ -23,8 +23,9 @@ import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.data.local.AppPrefs
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import com.bluetoothspotifytrigger.debug.DebugActions
-import com.bluetoothspotifytrigger.spotify.SpotifyController
-import com.bluetoothspotifytrigger.spotify.SpotifyPlayer
+import com.bluetoothspotifytrigger.spotify.PlayResult
+import com.bluetoothspotifytrigger.spotify.describe
+import com.bluetoothspotifytrigger.spotify.SpotifyIntentPlayer
 import com.bluetoothspotifytrigger.trigger.TriggerHandler
 import com.bluetoothspotifytrigger.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -75,8 +76,8 @@ class BluetoothMonitorService : Service() {
     private fun reportOutcome(deviceName: String, outcome: TriggerHandler.Outcome) {
         if (outcome !is TriggerHandler.Outcome.Played) return
         val time = DateFormat.getTimeFormat(this).format(Date())
-        val ok = outcome.result == SpotifyController.PlayResult.Success
-        val summary = "$time · $deviceName → ${SpotifyController.describe(outcome.result)}"
+        val ok = outcome.result == PlayResult.Success
+        val summary = "$time · $deviceName → ${outcome.result.describe()}"
         ServiceState.setLastEvent(summary)
 
         val manager = getSystemService(NotificationManager::class.java)
@@ -87,10 +88,10 @@ class BluetoothMonitorService : Service() {
                 NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
                     .setSmallIcon(com.bluetoothspotifytrigger.R.drawable.ic_bt_notification)
                     .setContentTitle("Lecture Spotify impossible ($deviceName)")
-                    .setContentText(SpotifyController.describe(outcome.result))
+                    .setContentText(outcome.result.describe())
                     .setStyle(
                         NotificationCompat.BigTextStyle()
-                            .bigText(SpotifyController.describe(outcome.result)),
+                            .bigText(outcome.result.describe()),
                     )
                     .setContentIntent(openAppIntent())
                     .setAutoCancel(true)
@@ -107,11 +108,11 @@ class BluetoothMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val player = SpotifyPlayer(this)
+        val player = SpotifyIntentPlayer(this)
         triggerHandler = TriggerHandler(
             repository = TriggerRepository(applicationContext.triggerDataStore),
-            // Arrière-plan : pas d'écran d'autorisation possible (voir SpotifyController).
-            play = { uri -> player.play(uri, foreground = false) },
+            // Volume et URI par appareil (voir DeviceConfig).
+            play = { uri, volume -> player.play(uri, volume) },
         )
         createNotificationChannel()
         startAsForeground()

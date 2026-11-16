@@ -10,11 +10,10 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
-import com.bluetoothspotifytrigger.spotify.SpotifyController.PlayResult
 import kotlinx.coroutines.delay
 
 /**
- * PROTOTYPE — lecture SANS le SDK Spotify (pas de Client ID, pas de limite de
+ * Lecture Spotify SANS SDK (pas de Client ID, pas de compte développeur, pas de
  * 5 utilisateurs du mode Développement).
  *
  * Principe : on envoie à l'app Spotify un intent VIEW sur l'URI suffixé de
@@ -40,8 +39,36 @@ class SpotifyIntentPlayer(context: Context) {
         false
     }
 
-    suspend fun play(uri: String): PlayResult {
+    /**
+     * Lance [uri] dans Spotify. Si [volumePercent] est fourni, règle le volume
+     * média avant le lancement, puis le réapplique une fois la lecture
+     * confirmée : à la connexion, Android peut restaurer le volume mémorisé
+     * pour l'appareil Bluetooth juste après notre premier réglage.
+     */
+    suspend fun play(uri: String, volumePercent: Int? = null): PlayResult {
+        val result = launch(uri, volumePercent)
+        if (result == PlayResult.Success && volumePercent != null) {
+            applyVolume(volumePercent)
+        }
+        return result
+    }
+
+    private fun applyVolume(percent: Int) {
+        val audio = appContext.getSystemService(AudioManager::class.java)
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val index = Math.round(percent.coerceIn(0, 100) * max / 100f)
+        try {
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC, index, 0)
+            Log.i(TAG, "Volume réglé à $percent % ($index/$max)")
+        } catch (e: SecurityException) {
+            // Ex. mode Ne pas déranger restrictif : on joue quand même.
+            Log.w(TAG, "Impossible de régler le volume", e)
+        }
+    }
+
+    private suspend fun launch(uri: String, volumePercent: Int?): PlayResult {
         if (!isSpotifyInstalled()) return PlayResult.SpotifyNotInstalled
+        volumePercent?.let { applyVolume(it) }
 
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("$uri:play"))
             .setPackage(SPOTIFY_PACKAGE)

@@ -6,18 +6,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Lecture des secrets Spotify depuis local.properties (jamais commité).
-// Valeurs par défaut vides / redirect standard pour que le build passe même
-// avant que tu aies renseigné le Client ID.
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) {
-        file.inputStream().use { load(it) }
-    }
+// Clé de signature : keystore.properties (jamais commité) à la racine du projet :
+//   storeFile=C:/chemin/vers/cle.jks
+//   storePassword=…
+//   keyAlias=…
+//   keyPassword=…
+// Absent (ex. clone frais) → les builds utilisent la clé de debug Android par défaut.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
-val spotifyClientId: String = localProperties.getProperty("SPOTIFY_CLIENT_ID", "")
-val spotifyRedirectUri: String =
-    localProperties.getProperty("SPOTIFY_REDIRECT_URI", "bluetoothspotifytrigger://auth")
+val hasReleaseKey = keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "com.bluetoothspotifytrigger"
@@ -30,16 +29,29 @@ android {
         applicationId = "com.bluetoothspotifytrigger"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0.0"
+    }
 
-        // Exposés au code via BuildConfig.SPOTIFY_CLIENT_ID / SPOTIFY_REDIRECT_URI.
-        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
-        buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"$spotifyRedirectUri\"")
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
+        // Debug signé avec la MÊME clé que la release (si dispo) : les deux
+        // versions s'installent l'une par-dessus l'autre sans perdre les réglages.
+        debug {
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
+        }
         release {
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -79,12 +91,6 @@ dependencies {
 
     // Persistance locale des associations MAC -> URI Spotify.
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-
-    // Spotify App Remote SDK : .aar à déposer dans app/libs/ (non disponible sur
-    // Maven Central). fileTree => n'importe quelle version *.aar est prise.
-    implementation(fileTree("libs") { include("*.aar") })
-    // gson est requis au runtime par le protocole App Remote.
-    implementation("com.google.code.gson:gson:2.10.1")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
     implementation(composeBom)
