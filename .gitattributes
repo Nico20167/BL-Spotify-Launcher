@@ -1,0 +1,10 @@
+# Normalisation des fins de ligne (LF dans le dépôt)
+* text=auto
+# Scripts : gradlew doit rester en LF (sinon cassé sous Linux/CI), .bat en CRLF
+gradlew text eol=lf
+*.bat text eol=crlf
+# Binaires
+*.jar binary
+*.aar binary
+*.apk binary
+*.png binary

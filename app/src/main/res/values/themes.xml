@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème de la fenêtre (avant que Compose ne prenne la main sur le rendu).
+         Sans ActionBar puisque l'UI est entièrement en Compose. -->
+    <style name="Theme.BluetoothSpotifyTrigger" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
