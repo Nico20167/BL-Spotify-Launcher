@@ -55,6 +55,61 @@ Prérequis : Android 8.0+, application Spotify installée et connectée.
 
 ---
 
+## Sécurité et vie privée
+
+**L'app n'a pas accès à Internet** (aucune permission `INTERNET`) : elle ne peut
+rien envoyer nulle part. Pas de compte, pas de publicité, pas de statistiques.
+Tout reste dans le stockage privé de l'app : pour chaque appareil configuré,
+son adresse Bluetooth, la playlist, le volume et le choix aléatoire.
+
+Ce que fait chaque autorisation, et rien de plus :
+
+| Autorisation | Utilisation réelle |
+|---|---|
+| Bluetooth (`BLUETOOTH_CONNECT`) | Lister les appareils appairés, savoir quand l'un d'eux se connecte. |
+| Notifications | Afficher la notification permanente de la surveillance et les alertes d'échec. |
+| Afficher par-dessus les autres apps | **Uniquement** l'exemption Android qui permet d'ouvrir Spotify en arrière-plan. L'app n'affiche jamais rien par-dessus les autres apps. |
+| Ignorer l'optimisation batterie | Empêcher le système d'arrêter la surveillance. |
+| Accès aux notifications (facultatif) | **Uniquement** la porte d'accès imposée par Android aux commandes de lecture de Spotify (mode aléatoire, titre suivant). Le service correspondant est vide : aucune notification n'est lue. |
+| Démarrage au boot | Relancer la surveillance après un redémarrage, si elle était active. |
+
+Ce que l'app peut faire sur le téléphone se limite à : ouvrir **l'app Spotify
+officielle** (`com.spotify.music`) sur un contenu dont l'adresse a été validée
+(`spotify:<type>:<identifiant>` uniquement), envoyer la touche média « Lecture »,
+régler le volume média, et activer l'aléatoire / passer au titre suivant dans
+Spotify. Elle ne fait rien si un son joue déjà ou pendant un appel.
+
+**Ce qu'une autre app ne peut pas faire** (vérifié sur téléphone, Android 17) :
+- simuler une connexion Bluetooth ou un redémarrage pour déclencher l'app :
+  ces événements sont des *broadcasts protégés* qu'Android réserve au système
+  (refusé même au shell `adb`) ;
+- piloter l'app : aucun composant n'accepte d'ordres de l'extérieur (l'écran
+  principal ne lit aucun paramètre ; le service d'accès aux notifications ne
+  peut être lié que par le système) ;
+- utiliser les commandes de simulation de la version debug : absentes de la
+  version release, et réservées à `adb` (permission `DUMP`) en debug.
+
+Limite connue : un appareil Bluetooth malveillant à portée qui usurperait
+l'adresse d'un de vos appareils configurés pourrait, au pire, déclencher la
+lecture de **votre propre playlist**. Aucun autre effet possible.
+
+### Vérifier qu'un APK est authentique
+
+Les APK officiels sont signés avec ce certificat :
+
+```
+SHA-256 : 67:9D:D7:BC:AB:86:EA:E8:1F:BD:06:62:03:01:26:B0:41:1F:7E:9E:35:7A:A4:9A:66:B5:7A:D7:09:AD:CD:C1
+```
+
+```bash
+apksigner verify --print-certs app-release.apk   # « Signer #1 certificate SHA-256 digest »
+```
+
+Un APK signé avec un autre certificat n'est pas une version officielle (et ne
+pourra pas s'installer par-dessus une version officielle).
+
+---
+
 ## Construire
 
 Environnement : JDK 17+ (testé avec Temurin 21), Android SDK (platform 35,
@@ -85,12 +140,21 @@ une mise à jour installable par-dessus (il faudrait désinstaller l'app et
 perdre les réglages). Sans `keystore.properties`, le build utilise la clé de
 debug Android par défaut.
 
+### Intégrité de la chaîne de build
+
+- `gradle/wrapper/gradle-wrapper.jar` : identique au jar officiel Gradle 8.10.2
+  (SHA-256 `2db75c40…48046`, vérifiable sur services.gradle.org).
+- La distribution Gradle téléchargée est vérifiée par empreinte
+  (`distributionSha256Sum` dans `gradle-wrapper.properties`).
+- Dépendances : uniquement AndroidX / Kotlin (Google Maven, Maven Central).
+
 ### Pièges d'environnement (Windows)
 
 - Antivirus avec analyse HTTPS (ex. Avast) : Gradle échoue en `PKIX path
   building failed`. Ajouter `-Djavax.net.ssl.trustStoreType=Windows-ROOT` à
-  `org.gradle.jvmargs` (déjà fait) et à `JAVA_OPTS` pour le wrapper. Casse aussi
-  le Play Store de l'émulateur.
+  `org.gradle.jvmargs` dans **`~/.gradle/gradle.properties`** (réglage propre à
+  la machine, à ne pas mettre dans le projet) et à `JAVA_OPTS` pour le wrapper.
+  Casse aussi le Play Store de l'émulateur.
 
 ---
 
