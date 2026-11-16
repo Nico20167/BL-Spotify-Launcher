@@ -44,6 +44,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.spotify.SpotifyLink
 
 @Composable
@@ -88,6 +89,7 @@ fun DeviceListScreen(
     }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val testMessage by viewModel.testMessage.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -99,6 +101,19 @@ fun DeviceListScreen(
             text = "Appareils appairés",
             style = MaterialTheme.typography.headlineSmall,
         )
+
+        if (BuildConfig.SPOTIFY_CLIENT_ID.isBlank()) {
+            Text(
+                "Client ID Spotify non configuré : la lecture ne fonctionnera pas " +
+                    "(renseigner SPOTIFY_CLIENT_ID dans local.properties puis rebuild).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        testMessage?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
 
         if (!btGranted) {
             val permanentlyDenied = needsBtPermission && requestedBt && activity != null &&
@@ -163,7 +178,11 @@ fun DeviceListScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(s.devices, key = { it.address }) { device ->
-                            DeviceCard(device = device, onEdit = { editing = device })
+                            DeviceCard(
+                                device = device,
+                                onEdit = { editing = device },
+                                onTest = { uri -> viewModel.testPlay(device.name, uri) },
+                            )
                         }
                     }
                 }
@@ -220,7 +239,7 @@ private fun BluetoothPermissionNeeded(
 }
 
 @Composable
-private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit) {
+private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit, onTest: (String) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = device.name, style = MaterialTheme.typography.titleMedium)
@@ -236,8 +255,13 @@ private fun DeviceCard(device: DeviceUi, onEdit: () -> Unit) {
                 },
             )
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onEdit) {
-                Text(if (device.spotifyUri == null) "Associer un URI" else "Modifier l'URI")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onEdit) {
+                    Text(if (device.spotifyUri == null) "Associer un URI" else "Modifier l'URI")
+                }
+                device.spotifyUri?.let { uri ->
+                    TextButton(onClick = { onTest(uri) }) { Text("Tester") }
+                }
             }
         }
     }

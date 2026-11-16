@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.text.format.DateFormat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -19,6 +20,7 @@ import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import com.bluetoothspotifytrigger.debug.DebugActions
+import com.bluetoothspotifytrigger.spotify.SpotifyController
 import com.bluetoothspotifytrigger.trigger.TriggerHandler
 import com.bluetoothspotifytrigger.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.util.Date
 
 /**
  * Foreground service qui héberge le [BtConnectionReceiver].
@@ -46,7 +49,36 @@ class BluetoothMonitorService : Service() {
     private val onConnected: (String, String) -> Unit = { address, name ->
         scope.launch {
             runCatching { triggerHandler.onDeviceConnected(address, name) }
+                .onSuccess { reportOutcome(name, it) }
                 .onFailure { Log.e(TAG, "Erreur lors du traitement de $address", it) }
+        }
+    }
+
+    /** Met à jour la notification persistante ; alerte l'utilisateur en cas d'échec. */
+    private fun reportOutcome(deviceName: String, outcome: TriggerHandler.Outcome) {
+        if (outcome !is TriggerHandler.Outcome.Played) return
+        val time = DateFormat.getTimeFormat(this).format(Date())
+        val ok = outcome.result == SpotifyController.PlayResult.Success
+        val summary = "$time · $deviceName → ${SpotifyController.describe(outcome.result)}"
+        ServiceState.setLastEvent(summary)
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildNotification(text = "Dernier : $summary"))
+        if (!ok) {
+            manager.notify(
+                ALERT_NOTIFICATION_ID,
+                NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+                    .setSmallIcon(com.bluetoothspotifytrigger.R.drawable.ic_bt_notification)
+                    .setContentTitle("Lecture Spotify impossible ($deviceName)")
+                    .setContentText(SpotifyController.describe(outcome.result))
+                    .setStyle(
+                        NotificationCompat.BigTextStyle()
+                            .bigText(SpotifyController.describe(outcome.result)),
+                    )
+                    .setContentIntent(openAppIntent())
+                    .setAutoCancel(true)
+                    .build(),
+            )
         }
     }
 
@@ -58,7 +90,12 @@ class BluetoothMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        triggerHandler = TriggerHandler(TriggerRepository(applicationContext.triggerDataStore))
+        val spotify = SpotifyController(this)
+        triggerHandler = TriggerHandler(
+            repository = TriggerRepository(applicationContext.triggerDataStore),
+            // Arrière-plan : pas d'écran d'autorisation possible (voir SpotifyController).
+            play = { uri -> spotify.connectAndPlay(uri, allowAuthUi = false) },
+        )
         createNotificationChannel()
         startAsForeground()
         registerBtReceiver()
@@ -125,41 +162,57 @@ class BluetoothMonitorService : Service() {
         }
     }
 
-    private fun buildNotification(): Notification {
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java),
+        PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    private fun buildNotification(
+        text: String = "En attente de la connexion d'un appareil configuré.",
+    ): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Surveillance Bluetooth active")
-            .setContentText("En attente de la connexion d'un appareil configuré.")
+            .setContentText(text)
             .setSmallIcon(com.bluetoothspotifytrigger.R.drawable.ic_bt_notification)
             .setOngoing(true)
-            .setContentIntent(contentIntent)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openAppIntent())
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Surveillance Bluetooth",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = "Notification persistante du service de détection Bluetooth."
-            }
             val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Surveillance Bluetooth",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Notification persistante du service de détection Bluetooth."
+                },
+            )
+            // Canal séparé, plus visible : les échecs de lecture doivent se voir.
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    ALERT_CHANNEL_ID,
+                    "Échecs de lecture",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    description = "Prévient quand Spotify n'a pas pu être lancé."
+                },
+            )
         }
     }
 
     companion object {
         const val TAG = "BluetoothMonitor"
         private const val CHANNEL_ID = "bt_monitor"
+        private const val ALERT_CHANNEL_ID = "playback_alerts"
         private const val NOTIFICATION_ID = 1
+        private const val ALERT_NOTIFICATION_ID = 2
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(

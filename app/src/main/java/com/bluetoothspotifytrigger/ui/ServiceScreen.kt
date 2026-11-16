@@ -31,6 +31,7 @@ import com.bluetoothspotifytrigger.bluetooth.ServiceState
 fun ServiceScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val isRunning by ServiceState.isRunning.collectAsStateWithLifecycle()
+    val lastEvent by ServiceState.lastEvent.collectAsStateWithLifecycle()
 
     var refreshKey by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshKey++ }
@@ -58,11 +59,15 @@ fun ServiceScreen(modifier: Modifier = Modifier) {
         Text("Service de surveillance", style = MaterialTheme.typography.headlineSmall)
 
         Card(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = if (isRunning) "État : actif ✅" else "État : inactif",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(16.dp),
-            )
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = if (isRunning) "État : actif ✅" else "État : inactif",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                lastEvent?.let {
+                    Text("Dernier déclenchement : $it", style = MaterialTheme.typography.bodySmall)
+                }
+            }
         }
 
         if (!canStart) {

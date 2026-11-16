@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.bluetooth.PairedDevice
 import com.bluetoothspotifytrigger.debug.DebugActions
+import com.bluetoothspotifytrigger.spotify.SpotifyController
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +92,23 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
                 BluetoothRead.MissingPermission
             }
         }
+    }
+
+    private val spotify = SpotifyController(application)
+
+    /** Résultat du dernier test de lecture (null = aucun / en cours masqué). */
+    private val _testMessage = MutableStateFlow<String?>(null)
+    val testMessage: StateFlow<String?> = _testMessage
+
+    /**
+     * Test manuel depuis l'UI. Premier plan → on autorise l'écran
+     * d'autorisation Spotify : c'est ici que l'utilisateur donne son accord une
+     * fois pour toutes, ce qui permet ensuite les lancements en arrière-plan.
+     */
+    fun testPlay(deviceName: String, uri: String) = viewModelScope.launch {
+        _testMessage.value = "$deviceName : connexion à Spotify…"
+        val result = spotify.connectAndPlay(uri, allowAuthUi = true)
+        _testMessage.value = "$deviceName : ${SpotifyController.describe(result)}"
     }
 
     fun setUri(macAddress: String, uri: String) = viewModelScope.launch {
