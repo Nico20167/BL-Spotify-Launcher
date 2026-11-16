@@ -17,3 +17,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# Notes de travail locales pour Claude Code (non publiées)
+CLAUDE.md
