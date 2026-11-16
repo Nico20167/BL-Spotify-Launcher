@@ -2,6 +2,7 @@ package com.bluetoothspotifytrigger.data
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -48,7 +49,17 @@ class TriggerRepository(private val dataStore: DataStore<Preferences>) {
 
     private fun keyFor(macAddress: String) = stringPreferencesKey(KEY_PREFIX + macAddress)
 
+    /** Debug : afficher des appareils appairés fictifs (voir DebugActions). */
+    val fakeDevicesEnabled: Flow<Boolean> = dataStore.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[FAKE_DEVICES_KEY] ?: false }
+
+    suspend fun setFakeDevicesEnabled(enabled: Boolean) {
+        dataStore.edit { it[FAKE_DEVICES_KEY] = enabled }
+    }
+
     companion object {
         private const val KEY_PREFIX = "device_uri:"
+        private val FAKE_DEVICES_KEY = booleanPreferencesKey("debug_fake_devices")
     }
 }

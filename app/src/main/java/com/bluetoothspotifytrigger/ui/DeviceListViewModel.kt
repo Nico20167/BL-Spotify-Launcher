@@ -6,7 +6,9 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.bluetoothspotifytrigger.BuildConfig
 import com.bluetoothspotifytrigger.bluetooth.PairedDevice
+import com.bluetoothspotifytrigger.debug.DebugActions
 import com.bluetoothspotifytrigger.data.TriggerRepository
 import com.bluetoothspotifytrigger.data.local.triggerDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,14 +45,20 @@ class DeviceListViewModel(application: Application) : AndroidViewModel(applicati
     private val bluetoothRead = MutableStateFlow<BluetoothRead>(BluetoothRead.Loading)
 
     val state: StateFlow<DeviceListUiState> =
-        combine(bluetoothRead, repository.associations) { bt, associations ->
+        combine(
+            bluetoothRead,
+            repository.associations,
+            repository.fakeDevicesEnabled,
+        ) { bt, associations, fakeEnabled ->
+            // Debug : ajoute les appareils fictifs aux vrais appareils appairés.
+            val fakes = if (BuildConfig.DEBUG && fakeEnabled) DebugActions.FAKE_DEVICES else emptyList()
             when (bt) {
                 BluetoothRead.Loading -> DeviceListUiState.Loading
                 BluetoothRead.Unsupported -> DeviceListUiState.BluetoothUnsupported
                 BluetoothRead.Disabled -> DeviceListUiState.BluetoothDisabled
                 BluetoothRead.MissingPermission -> DeviceListUiState.MissingPermission
                 is BluetoothRead.Devices -> DeviceListUiState.Loaded(
-                    bt.devices.map { device ->
+                    (bt.devices + fakes).map { device ->
                         DeviceUi(
                             name = device.name,
                             address = device.address,

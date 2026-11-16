@@ -44,6 +44,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bluetoothspotifytrigger.spotify.SpotifyLink
 
 @Composable
 fun DeviceListScreen(
@@ -250,9 +251,9 @@ private fun UriEditDialog(
     onClear: () -> Unit,
 ) {
     var text by remember { mutableStateOf(device.spotifyUri ?: "") }
-    val trimmed = text.trim()
-    // Validation légère : un URI Spotify commence toujours par "spotify:".
-    val looksValid = trimmed.startsWith("spotify:")
+    // Accepte un URI spotify:… ou un lien de partage open.spotify.com, converti en URI.
+    val parsed = SpotifyLink.parse(text)
+    val showError = text.isNotBlank() && parsed is SpotifyLink.Result.Invalid
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -262,15 +263,17 @@ private fun UriEditDialog(
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    label = { Text("URI Spotify") },
+                    label = { Text("Lien ou URI Spotify") },
                     singleLine = true,
-                    isError = trimmed.isNotEmpty() && !looksValid,
+                    isError = showError,
                     supportingText = {
                         Text(
-                            if (trimmed.isNotEmpty() && !looksValid) {
-                                "Doit commencer par \"spotify:\""
-                            } else {
-                                "Ex. spotify:playlist:… / spotify:album:… / spotify:track:…"
+                            when {
+                                showError -> (parsed as SpotifyLink.Result.Invalid).reason
+                                parsed is SpotifyLink.Result.Valid && parsed.uri != text.trim() ->
+                                    "→ ${parsed.uri}"
+                                else ->
+                                    "Dans Spotify : Partager → Copier le lien, puis colle-le ici."
                             },
                         )
                     },
@@ -280,8 +283,8 @@ private fun UriEditDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(trimmed) },
-                enabled = looksValid,
+                onClick = { (parsed as? SpotifyLink.Result.Valid)?.let { onSave(it.uri) } },
+                enabled = parsed is SpotifyLink.Result.Valid,
             ) {
                 Text("Enregistrer")
             }

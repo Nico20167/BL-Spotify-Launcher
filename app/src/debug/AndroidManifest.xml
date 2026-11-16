@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fusionné avec src/main/AndroidManifest.xml UNIQUEMENT pour le build debug. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Commandes de test adb. permission=DUMP : seul le shell adb peut les envoyer. -->
+        <receiver
+            android:name=".debug.DebugCommandReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.bluetoothspotifytrigger.debug.SET_FAKE_DEVICES" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
