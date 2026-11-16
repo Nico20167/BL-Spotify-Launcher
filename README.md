@@ -180,3 +180,13 @@ adb shell am broadcast -p com.bluetoothspotifytrigger \
 # Suivre le déroulé
 adb logcat -s BtConnectionReceiver ConnectionCoordinator TriggerHandler SpotifyIntentPlayer
 ```
+
+---
+
+## Licence
+
+[MIT](./LICENSE) — libre d'utilisation, de modification et de redistribution.
+
+Projet personnel **non affilié** à Spotify ni au Bluetooth SIG. Spotify est une
+marque de Spotify AB ; Bluetooth est une marque du Bluetooth SIG, Inc. L'icône
+utilise le symbole « bluetooth » des Material Icons de Google (Apache 2.0).

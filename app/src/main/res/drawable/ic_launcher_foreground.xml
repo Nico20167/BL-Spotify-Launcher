@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Premier plan de l'icône adaptative : symbole Bluetooth blanc.
+  Canevas 108x108 dp ; seule la zone centrale de 66 dp est garantie visible
+  (le lanceur découpe le reste selon sa forme). Le glyphe 24x24 (Material Icons
+  « bluetooth », Apache 2.0) est agrandi x2,25 (≈ 54 dp) et centré.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="2.25"
+        android:scaleY="2.25"
+        android:translateX="27"
+        android:translateY="27">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M17.71,7.71 L12,2 h-1 v7.59 L6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 11,14.41 V22 h1 l5.71,-5.71 -4.3,-4.29 4.3,-4.29z M13,5.83 l1.88,1.88 L13,9.59z M14.88,16.29 L13,18.17 v-3.76z" />
+    </group>
+</vector>
